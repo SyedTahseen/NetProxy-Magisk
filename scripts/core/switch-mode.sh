@@ -1,18 +1,18 @@
 #!/system/bin/sh
-# 切换出站模式 (Xray API 热更新)
-# 用法: switch-mode.sh <mode>
+# Switch the outbound mode (Xray API hot update)
+# Usage: switch-mode.sh <mode>
 #   mode: rule | global | direct
 #
-# Xray API 说明:
-# - adrules: 默认**替换**整个路由表
-# - rmrules: 按 ruleTag 删除
-# - ado/rmo: 添加/删除出站
+# Xray API notes:
+# - adrules: **replaces** the entire routing table by default
+# - rmrules: delete by ruleTag
+# - ado/rmo: add/remove outbounds
 #
-# 逻辑:
-# - 直连模式: 替换出站为 freedom + 替换路由
-# - 全局模式: 替换路由 (出站不变)
-# - 规则模式: 替换路由为 routing/rule.json (出站不变)
-# - 从直连切换: 先恢复 CURRENT_CONFIG 出站
+# Logic:
+# - Direct mode: replace the outbound with freedom + replace routing
+# - Global mode: replace routing (outbound unchanged)
+# - Rule mode: replace routing with routing/rule.json (outbound unchanged)
+# - Switching from direct: first restore the CURRENT_CONFIG outbound
 
 set -u
 
@@ -27,18 +27,18 @@ readonly GLOBAL_ROUTING="$ROUTING_DIR/global.json"
 readonly DIRECT_ROUTING="$ROUTING_DIR/direct.json"
 readonly LOG_FILE="$MODDIR/logs/service.log"
 
-# 导入工具库
+# Import the utility library
 . "$MODDIR/scripts/utils/log.sh"
 
 #######################################
-# 获取当前节点配置路径
+# Get the current node config path
 #######################################
 get_current_config() {
   grep '^CURRENT_CONFIG=' "$MODULE_CONF" 2> /dev/null | cut -d'=' -f2 | tr -d '"'
 }
 
 #######################################
-# 获取当前出站模式
+# Get the current outbound mode
 #######################################
 get_current_mode() {
   local mode
@@ -47,69 +47,69 @@ get_current_mode() {
 }
 
 #######################################
-# 替换路由规则 (adrules 默认是替换模式)
+# Replace routing rules (adrules replaces by default)
 #######################################
 replace_routing_rules() {
   local rules_file="$1"
   if [ -f "$rules_file" ]; then
-    log "INFO" "替换路由规则: $rules_file"
+    log "INFO" "Replacing routing rules: $rules_file"
     if "$XRAY_BIN" api adrules --server="$API_SERVER" "$rules_file" 2> /dev/null; then
-      log "INFO" "路由规则替换成功"
+      log "INFO" "Routing rules replaced successfully"
       return 0
     else
-      log "INFO" "路由规则替换失败"
+      log "INFO" "Failed to replace routing rules"
       return 1
     fi
   else
-    log "INFO" "规则文件不存在: $rules_file"
+    log "INFO" "Rules file does not exist: $rules_file"
     return 1
   fi
 }
 
 #######################################
-# 切换出站为 freedom (直连)
+# Switch the outbound to freedom (direct)
 #######################################
 switch_to_freedom() {
-  log "INFO" "切换出站为 freedom..."
-  # 删除现有 proxy 出站
+  log "INFO" "Switching outbound to freedom..."
+  # Remove the existing proxy outbound
   "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
-  # 添加 freedom 出站 (default.json)
+  # Add the freedom outbound (default.json)
   if "$XRAY_BIN" api ado --server="$API_SERVER" "$DEFAULT_OUTBOUND" 2> /dev/null; then
-    log "INFO" "已切换到 freedom 出站"
+    log "INFO" "Switched to freedom outbound"
     return 0
   else
-    log "INFO" "切换 freedom 出站失败"
+    log "INFO" "Failed to switch to freedom outbound"
     return 1
   fi
 }
 
 #######################################
-# 恢复节点出站配置
+# Restore the node outbound config
 #######################################
 restore_proxy_outbound() {
   local current_config
   current_config=$(get_current_config)
 
   if [ -z "$current_config" ] || [ ! -f "$current_config" ]; then
-    log "INFO" "无法获取当前节点配置，使用默认配置"
+    log "INFO" "Unable to get the current node config, using the default config"
     current_config="$DEFAULT_OUTBOUND"
   fi
 
-  log "INFO" "恢复节点配置: $current_config"
-  # 删除 freedom/proxy 出站
+  log "INFO" "Restoring node config: $current_config"
+  # Remove the freedom/proxy outbound
   "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
-  # 添加节点出站
+  # Add the node outbound
   if "$XRAY_BIN" api ado --server="$API_SERVER" "$current_config" 2> /dev/null; then
-    log "INFO" "节点出站已恢复"
+    log "INFO" "Node outbound restored"
     return 0
   else
-    log "INFO" "节点出站恢复失败"
+    log "INFO" "Failed to restore node outbound"
     return 1
   fi
 }
 
 #######################################
-# 更新 module.conf 中的模式
+# Update the mode in module.conf
 #######################################
 update_mode_config() {
   local mode="$1"
@@ -118,17 +118,17 @@ update_mode_config() {
   else
     echo "OUTBOUND_MODE=$mode" >> "$MODULE_CONF"
   fi
-  log "INFO" "已更新 module.conf: OUTBOUND_MODE=$mode"
+  log "INFO" "Updated module.conf: OUTBOUND_MODE=$mode"
 }
 
 #######################################
-# 主函数
+# Main function
 #######################################
 main() {
   local target_mode="${1:-}"
 
   if [ -z "$target_mode" ]; then
-    echo "用法: $0 <mode>"
+    echo "Usage: $0 <mode>"
     echo "  mode: rule | global | direct"
     exit 1
   fi
@@ -136,53 +136,53 @@ main() {
   local current_mode
   current_mode=$(get_current_mode)
 
-  log "INFO" "========== 切换出站模式 =========="
-  log "INFO" "当前模式: $current_mode -> 目标模式: $target_mode"
+  log "INFO" "========== Switching Outbound Mode =========="
+  log "INFO" "Current mode: $current_mode -> target mode: $target_mode"
 
-  # ===== 第一步: 处理出站配置 =====
+  # ===== Step 1: handle the outbound config =====
 
-  # 从直连模式切换出去: 需要恢复节点出站
+  # Switching away from direct mode: the node outbound must be restored
   if [ "$current_mode" = "direct" ] && [ "$target_mode" != "direct" ]; then
-    log "INFO" "从直连模式切换，恢复节点出站..."
+    log "INFO" "Switching from direct mode, restoring node outbound..."
     restore_proxy_outbound
   fi
 
-  # 切换到直连模式: 需要替换为 freedom 出站
+  # Switching to direct mode: must be replaced with the freedom outbound
   if [ "$target_mode" = "direct" ] && [ "$current_mode" != "direct" ]; then
-    log "INFO" "切换到直连模式，替换为 freedom 出站..."
+    log "INFO" "Switching to direct mode, replacing with freedom outbound..."
     switch_to_freedom
   fi
 
-  # ===== 第二步: 替换路由规则 =====
-  # adrules 默认是替换模式，会替换整个路由表
+  # ===== Step 2: replace routing rules =====
+  # adrules replaces by default and replaces the entire routing table
 
   case "$target_mode" in
     rule)
-      # 规则模式: 使用 routing/rule.json
-      log "INFO" "规则模式: 应用 rule.json"
+      # Rule mode: using routing/rule.json
+      log "INFO" "Rule mode: applying rule.json"
       replace_routing_rules "$ROUTING_JSON"
       ;;
     global)
-      # 全局模式: 使用 static global.json
-      log "INFO" "全局模式: 应用 global.json"
+      # Global mode: use the static global.json
+      log "INFO" "Global mode: applying global.json"
       replace_routing_rules "$GLOBAL_ROUTING"
       ;;
     direct)
-      # 直连模式: 使用 static direct.json
-      log "INFO" "直连模式: 应用 direct.json"
+      # Direct mode: use the static direct.json
+      log "INFO" "Direct mode: applying direct.json"
       replace_routing_rules "$DIRECT_ROUTING"
       ;;
     *)
-      log "INFO" "未知模式: $target_mode"
+      log "INFO" "Unknown mode: $target_mode"
       echo "error: unknown mode"
       exit 1
       ;;
   esac
 
-  # ===== 第三步: 更新配置 =====
+  # ===== Step 3: update config =====
   update_mode_config "$target_mode"
 
-  log "INFO" "========== 模式切换完成 =========="
+  log "INFO" "========== Mode Switch Complete =========="
   echo "success"
 }
 

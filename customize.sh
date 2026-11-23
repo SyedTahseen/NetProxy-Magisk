@@ -1,10 +1,10 @@
 #!/system/bin/sh
-# NetProxy Magisk Module 安装脚本
+# NetProxy Magisk module installation script
 
 SKIPUNZIP=1
 
 ################################################################################
-# 常量定义
+# Constants
 ################################################################################
 
 readonly MODULE_ID="netproxy"
@@ -12,10 +12,10 @@ readonly LIVE_DIR="/data/adb/modules/$MODULE_ID"
 readonly CONFIG_DIR="$LIVE_DIR/config"
 readonly BACKUP_DIR="$TMPDIR/netproxy_backup"
 
-# 全局状态: Xray 是否在运行
+# Global state: whether Xray is running
 XRAY_WAS_RUNNING=false
 
-# 需要保留的配置文件/目录 (相对于 config/)
+# Config files/directories to preserve (relative to config/)
 readonly PRESERVE_CONFIGS="
     module.conf
     tproxy/
@@ -24,7 +24,7 @@ readonly PRESERVE_CONFIGS="
     xray/confdir/routing
 "
 
-# 需要设置可执行权限的文件
+# Files that need the executable permission
 readonly EXECUTABLE_FILES="
     bin/xray
     bin/proxylink
@@ -40,10 +40,10 @@ readonly EXECUTABLE_FILES="
 "
 
 ################################################################################
-# 工具函数
+# Utility functions
 ################################################################################
 
-# 打印带分隔线的标题
+# Print a title with separator lines
 print_title() {
   ui_print ""
   ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -51,45 +51,45 @@ print_title() {
   ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
-# 打印步骤
+# Print a step
 print_step() {
   ui_print "▶ $1"
 }
 
-# 打印成功
+# Print a success message
 print_ok() {
   ui_print "  ✓ $1"
 }
 
-# 打印警告
+# Print a warning
 print_warn() {
   ui_print "  ⚠ $1"
 }
 
-# 打印错误
+# Print an error
 print_error() {
   ui_print "  ✗ $1"
 }
 
-# 检查目录是否非空
+# Check whether a directory is non-empty
 dir_not_empty() {
   [ -d "$1" ] && [ "$(ls -A "$1" 2> /dev/null)" ]
 }
 
 ################################################################################
-# 核心函数
+# Core functions
 ################################################################################
 
-# 备份现有配置
+# Back up existing config
 backup_config() {
-  print_step "检查现有配置..."
+  print_step "Checking existing config..."
 
   if ! dir_not_empty "$CONFIG_DIR"; then
-    print_ok "全新安装，无需备份"
+    print_ok "Fresh install, no backup needed"
     return 0
   fi
 
-  print_step "备份现有配置..."
+  print_step "Backing up existing config..."
   mkdir -p "$BACKUP_DIR"
 
   local config_item
@@ -100,9 +100,9 @@ backup_config() {
     if [ -e "$src" ]; then
       mkdir -p "$(dirname "$dst")"
       if cp -r "$src" "$dst" 2> /dev/null; then
-        print_ok "已备份: $config_item"
+        print_ok "Backed up: $config_item"
       else
-        print_warn "备份失败: $config_item"
+        print_warn "Backup failed: $config_item"
       fi
     fi
   done
@@ -110,27 +110,27 @@ backup_config() {
   return 0
 }
 
-# 解压模块文件
+# Extract module files
 extract_module() {
-  print_step "解压模块文件..."
+  print_step "Extracting module files..."
 
-  # 解压到 $MODPATH (Magisk 临时目录，重启后会复制到 $LIVE_DIR)，排除 META-INF 目录
+  # Extract to $MODPATH (Magisk temp directory, copied to $LIVE_DIR after reboot), excluding META-INF
   if ! unzip -o "$ZIPFILE" -x "META-INF/*" -d "$MODPATH" > /dev/null 2>&1; then
-    print_error "解压失败"
+    print_error "Extraction failed"
     return 1
   fi
 
-  print_ok "模块文件已解压"
+  print_ok "Module files extracted"
   return 0
 }
 
-# 恢复配置文件
+# Restore config files
 restore_config() {
   if ! dir_not_empty "$BACKUP_DIR"; then
     return 0
   fi
 
-  print_step "恢复配置文件..."
+  print_step "Restoring config files..."
 
   local config_item
   for config_item in $PRESERVE_CONFIGS; do
@@ -138,15 +138,15 @@ restore_config() {
     local dst="$MODPATH/config/$config_item"
 
     if [ -e "$src" ]; then
-      # 创建父目录
+      # Create parent directory
       mkdir -p "$(dirname "$dst")"
-      # 删除目标 (防止目录嵌套)
+      # Delete the target (prevents directory nesting)
       rm -rf "$dst" 2> /dev/null
-      # 复制
+      # Copy
       if cp -r "$src" "$dst" 2> /dev/null; then
-        print_ok "已恢复: $config_item"
+        print_ok "Restored: $config_item"
       else
-        print_warn "恢复失败: $config_item"
+        print_warn "Restore failed: $config_item"
       fi
     fi
   done
@@ -154,34 +154,34 @@ restore_config() {
   return 0
 }
 
-# 停止 Xray 服务 (如果运行中)
+# Stop the Xray service (if running)
 stop_xray_if_running() {
-  # 如果 LIVE_DIR 不存在，无需停止
+  # If LIVE_DIR does not exist, there is nothing to stop
   if [ ! -d "$LIVE_DIR" ]; then
     return 0
   fi
 
   if pidof -s "$LIVE_DIR/bin/xray" > /dev/null 2>&1; then
     XRAY_WAS_RUNNING=true
-    print_step "检测到 Xray 正在运行，停止服务..."
+    print_step "Xray is running, stopping service..."
     sh "$LIVE_DIR/scripts/core/service.sh" stop > /dev/null 2>&1
-    print_ok "服务已停止"
+    print_ok "Service stopped"
   fi
 
   return 0
 }
 
-# 同步到运行时目录 (热更新支持)
+# Sync to the runtime directory (hot update support)
 sync_to_live() {
-  print_step "同步到运行时目录..."
+  print_step "Syncing to the runtime directory..."
 
-  # 如果 LIVE_DIR 不存在，首次安装无需同步
+  # If LIVE_DIR does not exist, this is a first install and no sync is needed
   if [ ! -d "$LIVE_DIR" ]; then
-    print_ok "首次安装，跳过同步"
+    print_ok "First install, skipping sync"
     return 0
   fi
 
-  # 同步非配置文件 (bin, scripts, webroot 等)
+  # Sync non-config files (bin, scripts, webroot, etc.)
   local sync_dirs="bin scripts webroot action.sh service.sh module.prop"
 
   for item in $sync_dirs; do
@@ -191,73 +191,73 @@ sync_to_live() {
     if [ -e "$src" ]; then
       rm -rf "$dst" 2> /dev/null
       if cp -r "$src" "$dst" 2> /dev/null; then
-        print_ok "已同步: $item"
+        print_ok "Synced: $item"
       else
-        print_warn "同步失败: $item"
+        print_warn "Sync failed: $item"
       fi
     fi
   done
 
-  # 同步配置目录中的新文件 (增量更新)
+  # Sync new files in the config directory (incremental update)
   if [ -d "$MODPATH/config" ]; then
-    print_step "增量更新配置..."
+    print_step "Applying incremental config update..."
 
-    # 复制新增的配置文件 (不覆盖已存在的)
+    # Copy newly added config files (without overwriting existing ones)
     cp -rn "$MODPATH/config/"* "$LIVE_DIR/config/" 2> /dev/null
-    print_ok "配置目录已增量更新"
+    print_ok "Config directory updated incrementally"
   fi
 
   return 0
 }
 
-# 重新启动 Xray 服务 (如果之前在运行)
+# Restart the Xray service (if it was running before)
 restart_xray_if_needed() {
   if [ "$XRAY_WAS_RUNNING" = true ]; then
-    print_step "重新启动 Xray 服务..."
+    print_step "Restarting Xray service..."
     sh "$LIVE_DIR/scripts/core/service.sh" start > /dev/null 2>&1
-    print_ok "服务已启动"
+    print_ok "Service started"
   fi
 
   return 0
 }
 
-# 设置文件权限
+# Set file permissions
 set_permissions() {
-  print_step "设置文件权限..."
+  print_step "Setting file permissions..."
 
   local file
   for file in $EXECUTABLE_FILES; do
     local path="$MODPATH/$file"
     if [ -e "$path" ]; then
       chmod 0755 "$path" 2> /dev/null
-      # 同时设置 LIVE_DIR 的权限
+      # Also set permissions in LIVE_DIR
       [ -e "$LIVE_DIR/$file" ] && chmod 0755 "$LIVE_DIR/$file" 2> /dev/null
     fi
   done
 
-  # 设置目录权限
+  # Set directory permissions
   set_perm_recursive "$MODPATH" 0 0 0755 0755
 
-  print_ok "权限设置完成"
+  print_ok "Permissions set"
   return 0
 }
 
-# 询问用户是否安装配套应用
+# Ask the user whether to install the companion app
 ask_install_app() {
   ui_print ""
   ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  ui_print "  是否安装 NetProxy 配套应用？"
+  ui_print "  Install the NetProxy companion app?"
   ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   ui_print ""
-  ui_print "  [音量+] 安装 (打开 Google Play)"
-  ui_print "  [音量-] 跳过"
+  ui_print "  [Vol+] Install (opens Google Play)"
+  ui_print "  [Vol-] Skip"
   ui_print ""
 
   local timeout=10
   local choice=""
 
   while [ $timeout -gt 0 ]; do
-    # 读取音量键
+    # Read the volume key
     local key=$(getevent -lqc 1 2> /dev/null | grep -E "KEY_VOLUME(UP|DOWN)" | head -1)
 
     if echo "$key" | grep -q "VOLUMEUP"; then
@@ -273,32 +273,32 @@ ask_install_app() {
   done
 
   if [ "$choice" = "install" ]; then
-    print_step "正在打开 Google Play..."
+    print_step "Opening Google Play..."
     am start -a android.intent.action.VIEW -d "https://play.google.com/store/apps/details?id=com.fanjv.netproxy" > /dev/null 2>&1
-    print_ok "已打开 Google Play"
+    print_ok "Opened Google Play"
   else
-    print_step "已跳过安装"
+    print_step "Installation skipped"
   fi
 
   return 0
 }
 
-# 清理临时文件
+# Clean up temporary files
 cleanup() {
   rm -rf "$BACKUP_DIR" 2> /dev/null
 }
 
 ################################################################################
-# 主流程
+# Main flow
 ################################################################################
 
-print_title "NetProxy - Xray 透明代理"
-ui_print "  版本: $(grep_prop version "$TMPDIR/module.prop" 2> /dev/null || echo "unknown")"
+print_title "NetProxy - Xray Transparent Proxy"
+ui_print "  Version: $(grep_prop version "$TMPDIR/module.prop" 2> /dev/null || echo "unknown")"
 
-# 解压 module.prop 读取版本
+# Extract module.prop to read the version
 unzip -o "$ZIPFILE" "module.prop" -d "$TMPDIR" > /dev/null 2>&1
 
-# 执行安装步骤
+# Run the installation steps
 if backup_config \
   && extract_module \
   && restore_config \
@@ -309,16 +309,16 @@ if backup_config \
 
   cleanup
 
-  print_title "安装完成，请重启设备"
+  print_title "Installation complete, please reboot your device"
 
-  # 询问是否安装配套应用
+  # Ask whether to install the companion app
   ask_install_app
 else
   cleanup
-  print_title "安装失败"
+  print_title "Installation failed"
   ui_print ""
-  ui_print "  请检查上述错误信息"
-  ui_print "  并在 GitHub Issues 反馈"
+  ui_print "  Please check the error messages above"
+  ui_print "  and report it on GitHub Issues"
   ui_print ""
   exit 1
 fi

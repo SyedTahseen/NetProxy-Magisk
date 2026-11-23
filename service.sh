@@ -8,63 +8,63 @@ readonly LOG_FILE="$MODDIR/logs/service.log"
 . "$MODDIR/scripts/utils/log.sh"
 
 #######################################
-# 加载模块配置
+# Load module config
 #######################################
 load_module_config() {
-  # 默认值
+  # Defaults
   AUTO_START=1
   ONEPLUS_A16_FIX=1
 
   if [ -f "$MODULE_CONF" ]; then
     . "$MODULE_CONF"
-    log "INFO" "模块配置已加载"
+    log "INFO" "Module config loaded"
   else
-    log "WARN" "模块配置文件不存在，使用默认值"
+    log "WARN" "Module config file not found, using defaults"
   fi
 }
 
 #######################################
-# 等待系统启动完成
+# Wait for system boot to complete
 #######################################
 wait_for_boot() {
-  log "INFO" "等待系统启动完成..."
+  log "INFO" "Waiting for system boot to complete..."
 
-  # 等待系统开机完成
+  # Wait for the system to finish booting
   while [ "$(getprop sys.boot_completed)" != "1" ]; do
     sleep 1
   done
-  log "INFO" "系统启动完成"
+  log "INFO" "System boot complete"
 
-  # 等待存储挂载完成
+  # Wait for storage to be mounted
   while [ ! -d "/sdcard/Android" ]; do
     sleep 1
   done
-  log "INFO" "存储挂载完成"
+  log "INFO" "Storage mounted"
 }
 
 #######################################
-# 执行设备特定修复脚本
+# Run the device-specific fix script
 #######################################
 check_device_specific() {
-  # 如果启用 OnePlus A16 修复，直接执行
+  # If the OnePlus A16 fix is enabled, run it directly
   if [ "$ONEPLUS_A16_FIX" = "1" ]; then
-    log "INFO" "OnePlus A16 修复已启用，执行修复脚本"
+    log "INFO" "OnePlus A16 fix enabled, running fix script"
     sh "$MODDIR/scripts/utils/oneplus_a16_fix.sh"
   fi
 }
 
-# 确保日志目录存在
+# Ensure the log directory exists
 mkdir -p "$MODDIR/logs"
 
 #######################################
-# 记录环境信息
+# Record environment info
 #######################################
 log_env_info() {
-  log "INFO" "========== 环境信息检测 =========="
+  log "INFO" "========== Environment Detection =========="
 
   # KernelSU
   if [ "$KSU" = "true" ]; then
-    log "INFO" "环境: KernelSU"
+    log "INFO" "Environment: KernelSU"
     log "INFO" "KSU_VER: ${KSU_VER:-unknown}"
     log "INFO" "KSU_VER_CODE: ${KSU_VER_CODE:-unknown}"
     log "INFO" "KSU_KERNEL_VER_CODE: ${KSU_KERNEL_VER_CODE:-unknown}"
@@ -72,7 +72,7 @@ log_env_info() {
 
   # APatch
   if [ "$APATCH" = "true" ] || [ "$KERNELPATCH" = "true" ]; then
-    log "INFO" "环境: APatch / KernelPatch"
+    log "INFO" "Environment: APatch / KernelPatch"
     log "INFO" "APATCH_VER: ${APATCH_VER:-unknown}"
     log "INFO" "APATCH_VER_CODE: ${APATCH_VER_CODE:-unknown}"
     log "INFO" "KERNEL_VERSION: ${KERNEL_VERSION:-unknown}"
@@ -81,7 +81,7 @@ log_env_info() {
 
   # Magisk
   if [ -n "$MAGISK_VER" ]; then
-    log "INFO" "环境: Magisk"
+    log "INFO" "Environment: Magisk"
     log "INFO" "MAGISK_VER: $MAGISK_VER"
     log "INFO" "MAGISK_VER_CODE: $MAGISK_VER_CODE"
   fi
@@ -97,23 +97,23 @@ log_env_info() {
   log "INFO" "=================================="
 }
 
-# 主流程
-log "INFO" "========== NetProxy 服务启动 =========="
+# Main flow
+log "INFO" "========== NetProxy Service Starting =========="
 log_env_info
 load_module_config
 
 wait_for_boot
 
-# 检查是否启用开机自启
+# Check whether autostart on boot is enabled
 if [ "$AUTO_START" = "1" ]; then
-  log "INFO" "开始启动服务..."
+  log "INFO" "Starting service..."
   sh "$MODDIR/scripts/core/service.sh" start
-  log "INFO" "服务启动完成"
+  log "INFO" "Service startup complete"
 else
-  log "INFO" "开机自启已禁用，跳过启动"
+  log "INFO" "Autostart on boot is disabled, skipping startup"
 fi
 
-# 执行OnePlus A16修复
+# Run the OnePlus A16 fix
 check_device_specific
 
-log "INFO" "========== 服务启动流程结束 =========="
+log "INFO" "========== Service Startup Sequence Finished =========="

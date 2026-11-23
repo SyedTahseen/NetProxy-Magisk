@@ -8,49 +8,49 @@ readonly STATUS_FILE="$MODDIR/config/status.conf"
 readonly XRAY_BIN="$MODDIR/bin/xray"
 readonly API_SERVER="127.0.0.1:8080"
 
-# 导入工具库
+# Import the utility library
 . "$MODDIR/scripts/utils/log.sh"
 
 #######################################
-# 热切换配置
+# Hot-switch config
 # Arguments:
-#   $1 - 新配置文件路径
+#   $1 - new config file path
 #######################################
 hot_switch() {
   local config_file="$1"
 
   if [ ! -f "$config_file" ]; then
-    log "ERROR" "配置文件不存在: $config_file"
+    log "ERROR" "Config file does not exist: $config_file"
     exit 1
   fi
 
-  log "INFO" "========== 开始热切换配置 =========="
-  log "INFO" "新配置: $config_file"
+  log "INFO" "========== Starting Config Hot Switch =========="
+  log "INFO" "New config: $config_file"
 
-  # 1. 删除现有 proxy 出站
-  log "INFO" "删除 proxy 出站..."
+  # 1. Remove the existing proxy outbound
+  log "INFO" "Removing proxy outbound..."
   "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
 
-  # 2. 添加新出站
-  log "INFO" "添加新出站..."
+  # 2. Add the new outbound
+  log "INFO" "Adding new outbound..."
   if "$XRAY_BIN" api ado --server="$API_SERVER" "$config_file"; then
-    log "INFO" "新出站添加成功"
+    log "INFO" "New outbound added successfully"
   else
-    log "ERROR" "新出站添加失败"
+    log "ERROR" "Failed to add the new outbound"
     exit 1
   fi
 
-  # 3. 更新 module.conf 中的 CURRENT_CONFIG
+  # 3. Update CURRENT_CONFIG in module.conf
   sed -i "s|^CURRENT_CONFIG=.*|CURRENT_CONFIG=\"$config_file\"|" "$MODDIR/config/module.conf"
 
-  log "INFO" "配置文件已更新"
-  log "INFO" "========== 热切换完成 =========="
+  log "INFO" "Config file updated"
+  log "INFO" "========== Hot Switch Complete =========="
 }
 
-# 主流程
+# Main flow
 if [ -z "${1:-}" ]; then
-  echo "用法: $0 <config_file>"
-  echo "  config_file - 新配置文件的完整路径"
+  echo "Usage: $0 <config_file>"
+  echo "  config_file - full path of the new config file"
   exit 1
 fi
 

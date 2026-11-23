@@ -1,8 +1,8 @@
 #!/system/bin/sh
 
 #############################################################################
-# 订阅管理脚本
-# 功能: add/update/remove/list 订阅
+# Subscription management script
+# Function: add/update/remove/list subscriptions
 #############################################################################
 
 set -e
@@ -11,47 +11,47 @@ readonly MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly OUTBOUNDS_DIR="$MODDIR/config/xray/outbounds"
 readonly LOG_FILE="$MODDIR/logs/subscription.log"
 
-# 导入工具库
+# Import the utility library
 . "$MODDIR/scripts/utils/log.sh"
 
 #######################################
-# 显示帮助
+# Show help
 #######################################
 show_help() {
   cat << EOF
-用法: $0 <命令> [参数]
+Usage: $0 <command> [args]
 
-命令:
-    add <name> <url>    添加订阅
-    update <name>       更新指定订阅
-    update-all          更新所有订阅
-    remove <name>       删除订阅
-    list                列出所有订阅
+Commands:
+    add <name> <url>    Add subscription
+    update <name>       Update the given subscription
+    update-all          Update all subscriptions
+    remove <name>       Delete subscription
+    list                List all subscriptions
 
-示例:
-    $0 add "机场A" "https://example.com/sub"
-    $0 update "机场A"
-    $0 remove "机场A"
+Examples:
+    $0 add "ProviderA" "https://example.com/sub"
+    $0 update "ProviderA"
+    $0 remove "ProviderA"
 EOF
   exit 0
 }
 
 #######################################
-# 清理文件名
+# Sanitize the file name
 #######################################
 sanitize_name() {
   echo "$1" | sed 's/[\/\\:*?"<>| ]/_/g'
 }
 
 #######################################
-# 添加订阅
+# Add subscription
 #######################################
 cmd_add() {
   local name="$1"
   local url="$2"
 
   if [ -z "$name" ] || [ -z "$url" ]; then
-    echo "错误: 请提供订阅名称和URL"
+    echo "Error: please provide a subscription name and URL"
     exit 1
   fi
 
@@ -59,13 +59,13 @@ cmd_add() {
   local sub_dir="$OUTBOUNDS_DIR/sub_$safe_name"
 
   if [ -d "$sub_dir" ]; then
-    echo "错误: 订阅 '$name' 已存在"
+    echo "Error: subscription '$name' already exists"
     exit 1
   fi
 
   mkdir -p "$sub_dir"
 
-  # 保存元信息
+  # Save metadata
   cat > "$sub_dir/_meta.json" << EOF
 {
   "name": "$name",
@@ -74,20 +74,20 @@ cmd_add() {
 }
 EOF
 
-  # 下载并解析节点
+  # Download and parse nodes
   update_subscription "$name" "$url" "$sub_dir"
 
-  echo "订阅 '$name' 添加成功"
+  echo "Subscription '$name' added successfully"
 }
 
 #######################################
-# 更新订阅
+# Update subscription
 #######################################
 cmd_update() {
   local name="$1"
 
   if [ -z "$name" ]; then
-    echo "错误: 请提供订阅名称"
+    echo "Error: please provide a subscription name"
     exit 1
   fi
 
@@ -96,28 +96,28 @@ cmd_update() {
   local meta_file="$sub_dir/_meta.json"
 
   if [ ! -f "$meta_file" ]; then
-    echo "错误: 订阅 '$name' 不存在"
+    echo "Error: subscription '$name' does not exist"
     exit 1
   fi
 
-  # 读取 URL
+  # Read the URL
   local url=$(grep -o '"url": *"[^"]*"' "$meta_file" | sed 's/"url": *"\([^"]*\)"/\1/')
 
-  # 清空旧节点(保留 _meta.json)
+  # Clear old nodes (keep _meta.json)
   find "$sub_dir" -name "*.json" ! -name "_meta.json" -delete
 
-  # 更新节点
+  # Update nodes
   update_subscription "$name" "$url" "$sub_dir"
 
-  # 更新时间戳
+  # Update the timestamp
   local temp_meta=$(cat "$meta_file")
   echo "$temp_meta" | sed "s/\"updated\": *\"[^\"]*\"/\"updated\": \"$(date -Iseconds)\"/" > "$meta_file"
 
-  echo "订阅 '$name' 更新成功"
+  echo "Subscription '$name' updated successfully"
 }
 
 #######################################
-# 更新所有订阅
+# Update all subscriptions
 #######################################
 cmd_update_all() {
   local count=0
@@ -127,22 +127,22 @@ cmd_update_all() {
     [ -f "$meta_file" ] || continue
 
     local name=$(grep -o '"name": *"[^"]*"' "$meta_file" | sed 's/"name": *"\([^"]*\)"/\1/')
-    echo "更新订阅: $name"
+    echo "Updating subscription: $name"
     cmd_update "$name"
     count=$((count + 1))
   done
 
-  echo "已更新 $count 个订阅"
+  echo "Updated $count subscription(s)"
 }
 
 #######################################
-# 删除订阅
+# Delete subscription
 #######################################
 cmd_remove() {
   local name="$1"
 
   if [ -z "$name" ]; then
-    echo "错误: 请提供订阅名称"
+    echo "Error: please provide a subscription name"
     exit 1
   fi
 
@@ -150,19 +150,19 @@ cmd_remove() {
   local sub_dir="$OUTBOUNDS_DIR/sub_$safe_name"
 
   if [ ! -d "$sub_dir" ]; then
-    echo "错误: 订阅 '$name' 不存在"
+    echo "Error: subscription '$name' does not exist"
     exit 1
   fi
 
   rm -rf "$sub_dir"
-  echo "订阅 '$name' 已删除"
+  echo "Subscription '$name' deleted"
 }
 
 #######################################
-# 列出订阅
+# List subscriptions
 #######################################
 cmd_list() {
-  echo "订阅列表:"
+  echo "Subscription list:"
   for sub_dir in "$OUTBOUNDS_DIR"/sub_*; do
     [ -d "$sub_dir" ] || continue
     local meta_file="$sub_dir/_meta.json"
@@ -172,39 +172,39 @@ cmd_list() {
     local updated=$(grep -o '"updated": *"[^"]*"' "$meta_file" | sed 's/"updated": *"\([^"]*\)"/\1/')
     local node_count=$(find "$sub_dir" -name "*.json" ! -name "_meta.json" | wc -l)
 
-    echo "  - $name ($node_count 节点, 更新于 $updated)"
+    echo "  - $name ($node_count nodes, updated $updated)"
   done
 }
 
 #######################################
-# 下载并解析订阅
+# Download and parse the subscription
 #######################################
 update_subscription() {
   local name="$1"
   local url="$2"
   local sub_dir="$3"
 
-  log "INFO" "========== 开始更新订阅 =========="
-  log "DEBUG" "订阅名称: $name"
+  log "INFO" "========== Starting Subscription Update =========="
+  log "DEBUG" "Subscription name: $name"
   log "DEBUG" "URL: $url"
-  log "DEBUG" "目标目录: $sub_dir"
+  log "DEBUG" "Target directory: $sub_dir"
 
-  # 使用 proxylink 进行订阅转换
-  # -sub: 订阅链接
-  # -format xray: 输出 xray 格式
-  # -dir: 输出目录 (每个节点单独一个文件)
+  # Use proxylink to convert the subscription
+  # -sub: subscription URL
+  # -format xray: output in xray format
+  # -dir: output directory (one file per node)
   if "$MODDIR/bin/proxylink" -sub "$url" -insecure -dns -format xray -dir "$sub_dir" >> "$LOG_FILE" 2>&1; then
-    log "INFO" "订阅更新完成"
-    echo "已导入节点"
+    log "INFO" "Subscription update complete"
+    echo "Nodes imported"
   else
-    log "ERROR" "订阅更新失败"
-    echo "错误: 订阅更新失败，请查看日志"
+    log "ERROR" "Subscription update failed"
+    echo "Error: subscription update failed, please check the logs"
     exit 1
   fi
 }
 
 #######################################
-# 主程序
+# Main program
 #######################################
 case "${1:-}" in
   add)
@@ -226,7 +226,7 @@ case "${1:-}" in
     show_help
     ;;
   *)
-    echo "错误: 未知命令 '$1'"
+    echo "Error: unknown command '$1'"
     show_help
     ;;
 esac

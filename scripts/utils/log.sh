@@ -1,21 +1,21 @@
 #!/system/bin/sh
 
 #######################################
-# 标准日志函数
-# 用法:
-#   log <消息内容>         -> 默认使用 INFO 级别
-#   log <级别> <消息内容>  -> 指定级别 (INFO, WARN, ERROR, DEBUG)
-# 全局变量:
-#   LOG_FILE - 日志文件路径 (可选)
-# 输出:
-#   如果定义了 LOG_FILE，将格式化后的日志追加到该文件
-#   同时将格式化后的日志输出到标准错误 (stderr)
+# Standard logging function
+# Usage:
+#   log <message>         -> defaults to INFO level
+#   log <level> <message>  -> specify the level (INFO, WARN, ERROR, DEBUG)
+# Global variables:
+#   LOG_FILE - log file path (optional)
+# Output:
+#   If LOG_FILE is defined, append the formatted log to that file
+#   Also write the formatted log to standard error (stderr)
 #######################################
 log() {
   local level="INFO"
   local message="$1"
 
-  # 如果提供了两个或更多参数，第一个参数作为级别，第二个参数作为消息
+  # If two or more arguments are given, the first is the level and the second is the message
   if [ $# -ge 2 ]; then
     level="$1"
     message="$2"
@@ -25,16 +25,16 @@ log() {
   timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
   local log_content="[$timestamp] [$level] $message"
 
-  # 如果 LOG_FILE 变量非空，则追加到日志文件
+  # If the LOG_FILE variable is non-empty, append to the log file
   [ -n "${LOG_FILE:-}" ] && echo "$log_content" >> "$LOG_FILE"
 
-  # 将日志内容输出到标准错误 (stderr) 这允许在控制台或父进程中捕获日志输出
+  # Write the log content to standard error (stderr); this lets the console or a parent process capture the log output
   echo "$log_content" >&2
 }
 
 #######################################
-# 错误退出
-# 用法: die <消息内容> [退出码]
+# Exit with an error
+# Usage: die <message> [exit code]
 #######################################
 die() {
   log "ERROR" "$1"
