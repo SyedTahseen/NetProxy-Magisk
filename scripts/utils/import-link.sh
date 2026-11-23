@@ -31,7 +31,7 @@ for f in "$tmp_dir"/*.json; do
   target="$DEFAULT_GROUP_DIR/$base.json"
   n=2
   while [ -e "$target" ]; do
-    target="$DEFAULT_GROUP_DIR/${base}_$n.json"
+    target="$DEFAULT_GROUP_DIR/${base} $n.json"
     n=$((n + 1))
   done
   mv "$f" "$target"
