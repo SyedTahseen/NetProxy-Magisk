@@ -27,6 +27,10 @@ hot_switch() {
   log "INFO" "========== Starting Config Hot Switch =========="
   log "INFO" "New config: $config_file"
 
+  # Remember the config in use so it can be restored if the switch fails
+  local previous_config
+  previous_config=$(conf_get "$MODULE_CONF" "CURRENT_CONFIG")
+
   # 1. Remove the existing proxy outbound
   log "INFO" "Removing proxy outbound..."
   "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
@@ -36,6 +40,12 @@ hot_switch() {
   if "$XRAY_BIN" api ado --server="$API_SERVER" "$config_file"; then
     log "INFO" "New outbound added successfully"
   else
+    if [ -n "$previous_config" ] && [ -f "$previous_config" ] \
+      && "$XRAY_BIN" api ado --server="$API_SERVER" "$previous_config" > /dev/null 2>&1; then
+      log "WARN" "Previous outbound restored: $previous_config"
+    else
+      log "ERROR" "Could not restore the previous outbound, restart the service"
+    fi
     die "Failed to add the new outbound"
   fi
 

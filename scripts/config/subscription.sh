@@ -215,6 +215,14 @@ update_subscription() {
   # -format xray: output in xray format
   # -dir: output directory (one file per node)
   if "$MODDIR/bin/proxylink" -sub "$url" -insecure -dns -format xray -dir "$tmp_dir" >> "$LOG_FILE" 2>&1; then
+    # An empty result is treated as a failure so existing nodes are never wiped
+    if [ -z "$(find "$tmp_dir" -name "*.json" 2> /dev/null | head -n 1)" ]; then
+      rm -rf "$tmp_dir"
+      log "ERROR" "Subscription returned no nodes, keeping the existing ones"
+      echo "Error: subscription returned no nodes, existing nodes were kept"
+      return 1
+    fi
+
     # Replace the old nodes (keep _meta.json)
     find "$sub_dir" -name "*.json" ! -name "_meta.json" -delete
     find "$tmp_dir" -name "*.json" -exec mv {} "$sub_dir/" \;
