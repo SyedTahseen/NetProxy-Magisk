@@ -242,47 +242,6 @@ set_permissions() {
   return 0
 }
 
-# Ask the user whether to install the companion app
-ask_install_app() {
-  ui_print ""
-  ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  ui_print "  Install the NetProxy companion app?"
-  ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  ui_print ""
-  ui_print "  [Vol+] Install (opens Google Play)"
-  ui_print "  [Vol-] Skip"
-  ui_print ""
-
-  local timeout=10
-  local choice=""
-
-  while [ $timeout -gt 0 ]; do
-    # Read the volume key
-    local key=$(getevent -lqc 1 2> /dev/null | grep -E "KEY_VOLUME(UP|DOWN)" | head -1)
-
-    if echo "$key" | grep -q "VOLUMEUP"; then
-      choice="install"
-      break
-    elif echo "$key" | grep -q "VOLUMEDOWN"; then
-      choice="skip"
-      break
-    fi
-
-    sleep 1
-    timeout=$((timeout - 1))
-  done
-
-  if [ "$choice" = "install" ]; then
-    print_step "Opening Google Play..."
-    am start -a android.intent.action.VIEW -d "https://play.google.com/store/apps/details?id=com.fanjv.netproxy" > /dev/null 2>&1
-    print_ok "Opened Google Play"
-  else
-    print_step "Installation skipped"
-  fi
-
-  return 0
-}
-
 # Clean up temporary files
 cleanup() {
   rm -rf "$BACKUP_DIR" 2> /dev/null
@@ -310,9 +269,6 @@ if backup_config \
   cleanup
 
   print_title "Installation complete, please reboot your device"
-
-  # Ask whether to install the companion app
-  ask_install_app
 else
   cleanup
   print_title "Installation failed"

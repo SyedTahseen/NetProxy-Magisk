@@ -4,5 +4,4 @@ version=v6.0.1
 versionCode=503
 author=Fanju
 description=Proxy tool based on the Xray core
-updateJson=https://raw.githubusercontent.com/Fanju6/NetProxy-Magisk/refs/heads/main/update.json
 actionIcon=/data/adb/modules/netproxy/webroot/logo.png
