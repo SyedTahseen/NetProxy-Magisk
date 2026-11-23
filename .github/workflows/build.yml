@@ -74,9 +74,51 @@ jobs:
           if-no-files-found: error
           compression-level: 6
 
-      - name: Zip for release (tag pushes only)
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: cd dist && zip -q -r -X "../${ZIP_NAME}" .
+      # Always build the flashable zip (needed for Telegram and for releases)
+      - name: Zip module
+        run: cd dist && zip -q -r -9 -X "../${ZIP_NAME}" .
+
+      # Needs two repository secrets: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.
+      # Skipped on pull requests (secrets are not available there) and when the secrets are missing.
+      # A Telegram failure only warns; it does not fail the build.
+      - name: Send zip to Telegram
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -uo pipefail
+          if [ -z "${TG_TOKEN:-}" ] || [ -z "${TG_CHAT_ID:-}" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set, skipping Telegram upload"
+            exit 0
+          fi
+
+          SIZE=$(stat -c%s "${ZIP_NAME}")
+          if [ "$SIZE" -gt 52428800 ]; then
+            echo "::warning::${ZIP_NAME} is larger than 50 MB, Telegram bots cannot upload it"
+            exit 0
+          fi
+
+          FIRST_LINE=$(printf '%s' "$COMMIT_MSG" | head -n 1)
+          CAPTION="NetProxy build
+          Xray: ${XRAY_TAG}
+          Commit: ${GITHUB_SHA::7}
+          ${FIRST_LINE}"
+
+          RESP=$(curl -sS --max-time 300 \
+            -F "chat_id=${TG_CHAT_ID}" \
+            -F "caption=${CAPTION}" \
+            -F "document=@${ZIP_NAME}" \
+            "https://api.telegram.org/bot${TG_TOKEN}/sendDocument") || {
+              echo "::warning::curl failed while contacting Telegram"; exit 0; }
+
+          if echo "$RESP" | grep -q '"ok":true'; then
+            echo "Sent ${ZIP_NAME} to Telegram"
+          else
+            echo "::warning::Telegram rejected the upload: $(echo "$RESP" | sed 's/.*"description":"\([^"]*\)".*/\1/')"
+          fi
 
       - name: Attach to GitHub release (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
