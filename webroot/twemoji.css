@@ -6,7 +6,6 @@
     src: url('./fonts/Twemoji.Mozilla.ttf') format('truetype');
 }
 
-/* Flag icons use the Twemoji font */
 .flag-icon,
 .twemoji {
     font-family: 'Twemoji',

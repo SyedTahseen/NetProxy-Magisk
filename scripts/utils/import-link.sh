@@ -1,9 +1,4 @@
 #!/system/bin/sh
-# Import a node link into the default group (used by the CLI and the WebUI).
-# Normalizes socks:// links with base64 credentials before calling proxylink.
-# Nodes whose name already exists are kept side by side (Germany, Germany_2, ...)
-# instead of overwriting the older node.
-# Usage: import-link.sh <node-link>
 
 MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTBOUNDS_DIR="$MODDIR/config/xray/outbounds"
@@ -20,9 +15,6 @@ link=$(sh "$MODDIR/scripts/utils/socks-fix.sh" link "$link")
 mkdir -p "$DEFAULT_GROUP_DIR"
 chmod +x "$MODDIR/bin/proxylink" 2> /dev/null
 
-# proxylink names the file after the node and writes it into the current
-# directory, silently overwriting a node with the same name. So generate it in a
-# temporary directory first and move it into the group with a unique name.
 tmp_dir="$OUTBOUNDS_DIR/.tmp_import_$$"
 rm -rf "$tmp_dir"
 mkdir -p "$tmp_dir"

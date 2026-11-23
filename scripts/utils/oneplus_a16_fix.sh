@@ -2,31 +2,16 @@
 set -e
 set -u
 
-#############################################################################
-# Multi-device compatibility fix script (OnePlus ColorOS + REDMAGIC OS / ZTE)
-# Features:
-#   - OnePlus Android 16 (ColorOS 16): remove the REJECT rules in the fw_INPUT / fw_OUTPUT chains that stop Google Play / GMS from working
-#   - REDMAGIC OS (ZTE): remove the DROP/REJECT rules in the zte_fw_gms chain that stop Google Play / GMS from working
-#############################################################################
-
 readonly MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly LOG_FILE="$MODDIR/logs/service.log"
 
-# Import the utility library
 . "$MODDIR/scripts/utils/log.sh"
 
-#######################################
-# Remove the REJECT/DROP rules in the given chain
-# Arguments:
-#   $1 - iptables command (iptables / ip6tables)
-#   $2 - chain name
-#######################################
 remove_block_rules_from_chain() {
   local cmd="$1"
   local chain="$2"
   local table="filter"
 
-  # Get the line numbers of all REJECT or DROP rules (in reverse order)
   local line_numbers
   line_numbers=$(
     $cmd -t "$table" -nvL "$chain" --line-numbers 2> /dev/null \
@@ -54,11 +39,6 @@ remove_block_rules_from_chain() {
   log "INFO" "$cmd: deleted $count REJECT/DROP rule(s) from chain $chain"
 }
 
-#######################################
-# Remove the REJECT/DROP rules of the given chains, for IPv4 and IPv6
-# Arguments:
-#   $1 - space-separated chain names
-#######################################
 clean_chains() {
   local chain
   for chain in $1; do
@@ -68,9 +48,6 @@ clean_chains() {
   return 0
 }
 
-#######################################
-# Detect the device type (by chain existence) and run the matching cleanup
-#######################################
 fix_by_device() {
   has_iptables=0
   has_ip6tables=0
@@ -96,9 +73,6 @@ fix_by_device() {
   fi
 }
 
-#######################################
-# Main flow
-#######################################
 log "INFO" "========== Multi-device compatibility fix: started (OnePlus + REDMAGIC) =========="
 
 fix_by_device

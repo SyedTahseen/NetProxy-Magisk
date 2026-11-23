@@ -1,6 +1,4 @@
 #!/system/bin/sh
-# NetProxy Action Script
-# Module action button in Magisk Manager (start/stop toggle)
 
 readonly MODDIR="${0%/*}"
 readonly SERVICE_SCRIPT="$MODDIR/scripts/core/service.sh"
@@ -9,21 +7,16 @@ readonly XRAY_BIN="$MODDIR/bin/xray"
 
 . "$MODDIR/scripts/utils/log.sh"
 
-#######################################
-# Check whether Xray is running
-#######################################
 is_xray_running() {
   pidof -s "$XRAY_BIN" > /dev/null 2>&1
 }
 
-# Capture all output to the Manager
 exec 2>&1
 
 echo "==================================="
 echo "       NetProxy Action Script      "
 echo "==================================="
 
-# Main flow: toggle the service, then report the real outcome
 if is_xray_running; then
   log "INFO" "Xray is running, preparing to stop it..."
   sh "$SERVICE_SCRIPT" stop
@@ -46,5 +39,4 @@ echo "==================================="
 echo " Result: $result"
 echo "==================================="
 
-# Sleep briefly so the log is fully displayed before exiting
 sleep 1

@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NetProxy</title>
 
-    <!-- Prevent FOUC (Flash of Unstyled Content) - critical CSS must be inlined -->
     <style>
-      /* Overlay styles */
       #fouc-overlay {
         position: fixed;
         top: 0;
@@ -24,28 +22,24 @@
       }
     </style>
 
-    <!-- Apply the theme in advance and set the overlay color -->
     <script>
       (function () {
         try {
           var savedTheme = localStorage.getItem("theme") || "auto";
           var html = document.documentElement;
 
-          // Remove all theme classes
           html.classList.remove(
             "mdui-theme-light",
             "mdui-theme-dark",
             "mdui-theme-auto",
           );
 
-          // Determine the theme mode that is actually applied
           var isDark =
             savedTheme === "dark" ||
             (savedTheme === "auto" &&
               window.matchMedia &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-          // Set the theme class
           if (savedTheme === "light") {
             html.classList.add("mdui-theme-light");
           } else if (savedTheme === "dark") {
@@ -54,19 +48,15 @@
             html.classList.add("mdui-theme-auto");
           }
 
-          // Dynamically create the overlay background-color style
           var style = document.createElement("style");
           var fallbackColor = isDark ? "#141218" : "#fef7ff";
 
           if (savedTheme === "auto") {
-            // Auto mode: use the Monet variables injected by KernelSU, falling back to default colors
-            // --background is the Monet color variable injected by KernelSU colors.css
             style.textContent =
               "#fouc-overlay { background-color: var(--background, " +
               fallbackColor +
               "); }";
           } else {
-            // Manual mode: use hard-coded colors (KernelSU variables are ignored in manual mode)
             style.textContent =
               "#fouc-overlay { background-color: " + fallbackColor + "; }";
           }
@@ -77,19 +67,9 @@
       })();
     </script>
 
-    <!--
-    CSS load order matters!
-    1. material-icons.css / twemoji.css - local icon and flag fonts (work offline)
-    2. KernelSU insets.css - edge-to-edge adaptation (injected into the WebView at runtime)
-    3. KernelSU colors.css - Monet color variables (injected into the WebView at runtime)
-    4. Bundled mdui / vendor / app styles (the assets/*.css links below; they map the
-       Monet variables to MDUI variables and must come after colors.css)
-  -->
-
     <link rel="stylesheet" href="/material-icons.css" />
     <link rel="stylesheet" href="/twemoji.css" />
 
-    <!-- Provided dynamically when running inside the KernelSU/APatch Manager WebView -->
     <link
       rel="stylesheet"
       href="https://mui.kernelsu.org/internal/insets.css"
@@ -108,11 +88,9 @@
   </head>
 
   <body>
-    <!-- Overlay: covers the page until styles finish loading -->
     <div id="fouc-overlay"></div>
 
     <script>
-      // Fade out the overlay once styles have loaded
       (function () {
         function hideOverlay() {
           var overlay = document.getElementById("fouc-overlay");
@@ -124,9 +102,7 @@
           }
         }
 
-        // Check whether styles have loaded
         function checkStylesLoaded() {
-          // Check whether mdui's CSS variables are defined
           var testEl = document.createElement("div");
           testEl.style.cssText = "position:absolute;visibility:hidden;";
           document.body.appendChild(testEl);
@@ -137,7 +113,6 @@
           return mduiLoaded;
         }
 
-        // Use requestAnimationFrame to make sure the check runs after rendering
         function tryHideOverlay() {
           if (checkStylesLoaded()) {
             hideOverlay();
@@ -146,19 +121,16 @@
           }
         }
 
-        // Start checking once the DOM is ready
         if (document.readyState === "loading") {
           document.addEventListener("DOMContentLoaded", tryHideOverlay);
         } else {
           requestAnimationFrame(tryHideOverlay);
         }
 
-        // Timeout guard: wait at most 2 seconds
         setTimeout(hideOverlay, 2000);
       })();
     </script>
     <mdui-layout>
-      <!-- Top App Bar -->
       <mdui-top-app-bar>
         <div style="width: 24px"></div>
         <mdui-top-app-bar-title data-i18n="app.name"
@@ -172,12 +144,9 @@
         ></mdui-button-icon>
       </mdui-top-app-bar>
 
-      <!-- Main Content -->
       <mdui-layout-main id="main-content">
-        <!-- Status Page -->
         <div id="status-page" class="page active">
           <div class="dashboard-grid" id="dashboard-grid">
-            <!-- Network speed (full width, 2 cells high) -->
             <div
               class="common-card full-width height-2 speed-card"
               id="card-speed"
@@ -197,7 +166,6 @@
               </div>
             </div>
 
-            <!-- Left column: outbound mode (2 cells high) -->
             <div
               class="common-card half-width height-2 mode-card"
               id="card-mode"
@@ -233,7 +201,6 @@
               </div>
             </div>
 
-            <!-- Right column: network check (1 cell high) -->
             <div class="common-card half-width height-1" id="card-external-ip">
               <div class="card-delete-btn">
                 <mdui-icon name="close"></mdui-icon>
@@ -255,7 +222,6 @@
               </div>
             </div>
 
-            <!-- Left column: LAN IP (1 cell high) -->
             <div class="common-card half-width height-1" id="card-internal-ip">
               <div class="card-delete-btn">
                 <mdui-icon name="close"></mdui-icon>
@@ -273,7 +239,6 @@
               </div>
             </div>
 
-            <!-- Right column: traffic statistics (2 cells high) -->
             <div
               class="common-card half-width height-2 traffic-card"
               id="card-traffic"
@@ -356,7 +321,6 @@
               </div>
             </div>
 
-            <!-- CPU usage (new component) -->
             <div
               class="common-card half-width height-1"
               id="card-cpu"
@@ -374,7 +338,6 @@
               </div>
             </div>
 
-            <!-- Memory usage (new component) -->
             <div
               class="common-card half-width height-1"
               id="card-memory"
@@ -393,7 +356,6 @@
             </div>
           </div>
 
-          <!-- Add-widget panel -->
           <div id="add-widget-panel" class="add-widget-panel">
             <div class="add-widget-header">
               <span class="title" data-i18n="dashboard.add_widget"
@@ -405,12 +367,10 @@
               ></mdui-button-icon>
             </div>
             <div class="add-widget-list" id="add-widget-list">
-              <!-- Generated dynamically by JS -->
             </div>
           </div>
         </div>
 
-        <!-- Config Page -->
         <div id="config-page" class="page">
           <div class="container">
             <mdui-card variant="elevated">
@@ -454,12 +414,10 @@
                   </mdui-dropdown>
                 </div>
 
-                <!-- Group tabs, horizontal (generated dynamically) -->
                 <mdui-tabs
                   id="config-tabs"
                   style="max-width: 100%; overflow-x: auto"
                 >
-                  <!-- Initial loading state, rebuilt dynamically by JS -->
                   <mdui-tab value="loading" data-i18n="common.loading"
                     >Loading...</mdui-tab
                   >
@@ -479,10 +437,8 @@
           </div>
         </div>
 
-        <!-- Proxy Settings Page -->
         <div id="uid-page" class="page">
           <div class="container">
-            <!-- Unified App Proxy Settings Card -->
             <mdui-card variant="elevated" style="margin-bottom: 16px">
               <div style="padding: 20px">
                 <h2
@@ -516,7 +472,6 @@
               </div>
             </mdui-card>
 
-            <!-- App List Card -->
             <mdui-card variant="elevated" id="proxy-list-card">
               <div style="padding: 20px">
                 <div
@@ -553,12 +508,9 @@
           </div>
         </div>
 
-        <!-- Logs Page -->
         <div id="logs-page" class="page">
           <div class="container">
-            <!-- Tabs for different log types -->
             <mdui-card variant="elevated" class="compact-card">
-              <!-- Title with Auto Refresh Toggle -->
               <div
                 style="
                   display: flex;
@@ -594,7 +546,6 @@
                   >Xray Log</mdui-tab
                 >
 
-                <!-- Service Log Panel -->
                 <mdui-tab-panel slot="panel" value="service">
                   <div style="padding: 16px">
                     <div
@@ -607,7 +558,6 @@
                   </div>
                 </mdui-tab-panel>
 
-                <!-- Xray Log Panel -->
                 <mdui-tab-panel slot="panel" value="xray">
                   <div style="padding: 16px">
                     <div
@@ -653,11 +603,9 @@
           </div>
         </div>
 
-        <!-- Settings Page -->
         <div id="settings-page" class="page">
           <div class="container">
             <mdui-list>
-              <!-- Module settings entry -->
               <mdui-list-item
                 icon="settings_applications"
                 id="settings-module-entry"
@@ -668,7 +616,6 @@
 
               <mdui-divider></mdui-divider>
 
-              <!-- Proxy settings entry -->
               <mdui-list-item icon="swap_vert" id="settings-proxy-entry">
                 <span data-i18n="settings.proxy">Proxy Settings</span>
                 <mdui-icon slot="end-icon" name="chevron_right"></mdui-icon>
@@ -676,7 +623,6 @@
 
               <mdui-divider></mdui-divider>
 
-              <!-- Routing settings entry -->
               <mdui-list-item icon="alt_route" id="settings-routing-entry">
                 <span data-i18n="settings.routing">Routing Rules</span>
                 <mdui-icon slot="end-icon" name="chevron_right"></mdui-icon>
@@ -684,7 +630,6 @@
 
               <mdui-divider></mdui-divider>
 
-              <!-- DNS settings entry -->
               <mdui-list-item icon="dns" id="settings-dns-entry">
                 <span data-i18n="settings.dns">DNS Settings</span>
                 <mdui-icon slot="end-icon" name="chevron_right"></mdui-icon>
@@ -692,8 +637,6 @@
 
               <mdui-divider></mdui-divider>
 
-
-              <!-- Theme -->
               <mdui-list-item icon="palette" id="settings-theme">
                 <span data-i18n="settings.theme">Theme &amp; Colors</span>
                 <mdui-icon slot="end-icon" name="chevron_right"></mdui-icon>
@@ -701,7 +644,6 @@
 
               <mdui-divider></mdui-divider>
 
-              <!-- Logs entry -->
               <mdui-list-item icon="article" id="settings-logs-entry">
                 <span data-i18n="settings.logs">Logs</span>
                 <mdui-icon slot="end-icon" name="chevron_right"></mdui-icon>
@@ -709,7 +651,6 @@
 
               <mdui-divider></mdui-divider>
 
-              <!-- About -->
               <mdui-list-item icon="info" id="settings-about">
                 <span data-i18n="settings.about">About</span>
                 <mdui-icon slot="end-icon" name="chevron_right"></mdui-icon>
@@ -718,7 +659,6 @@
           </div>
         </div>
 
-        <!-- Module Settings Page -->
         <div id="module-page" class="page">
           <div class="container">
             <mdui-card variant="elevated" class="compact-card">
@@ -779,7 +719,6 @@
           </div>
         </div>
 
-        <!-- Routing Page -->
         <div id="routing-page" class="page">
           <div class="container">
             <mdui-card variant="elevated" class="compact-card">
@@ -849,7 +788,6 @@
           </div>
         </div>
 
-        <!-- DNS Settings Page -->
         <div id="dns-page" class="page">
           <div class="container">
             <mdui-card variant="elevated" class="compact-card">
@@ -940,7 +878,6 @@
           </div>
         </div>
 
-        <!-- Proxy Settings Page -->
         <div id="proxy-settings-page" class="page">
           <div class="container">
             <mdui-card variant="elevated" class="compact-card">
@@ -960,7 +897,6 @@
               </div>
             </mdui-card>
 
-            <!-- Action buttons -->
             <div style="padding: 16px 0; text-align: right">
               <mdui-button
                 id="proxy-save-btn"
@@ -970,7 +906,6 @@
               >
             </div>
 
-            <!-- Group: core settings -->
             <mdui-card variant="outlined" style="margin-top: 16px">
               <div style="padding: 16px">
                 <h4
@@ -1058,7 +993,6 @@
               </div>
             </mdui-card>
 
-            <!-- Group: proxy switches -->
             <mdui-card variant="outlined" style="margin-top: 16px">
               <div style="padding: 16px">
                 <h4
@@ -1161,7 +1095,6 @@
               </div>
             </mdui-card>
 
-            <!-- Group: interface settings -->
             <mdui-card variant="outlined" style="margin-top: 16px">
               <div style="padding: 16px">
                 <h4
@@ -1215,7 +1148,6 @@
               </div>
             </mdui-card>
 
-            <!-- Group: DNS settings -->
             <mdui-card variant="outlined" style="margin-top: 16px">
               <div style="padding: 16px">
                 <h4
@@ -1243,7 +1175,6 @@
               </div>
             </mdui-card>
 
-            <!-- Group: China IP bypass -->
             <mdui-card variant="outlined" style="margin-top: 16px">
               <div style="padding: 16px">
                 <h4
@@ -1300,7 +1231,6 @@
               </div>
             </mdui-card>
 
-            <!-- Group: IP list settings -->
             <mdui-card variant="outlined" style="margin-top: 16px">
               <div style="padding: 16px">
                 <h4
@@ -1340,7 +1270,6 @@
               </div>
             </mdui-card>
 
-            <!-- Group: MAC filtering (hotspot) -->
             <mdui-card
               variant="outlined"
               style="margin-top: 16px; margin-bottom: 16px"
@@ -1414,10 +1343,8 @@
           </div>
         </div>
 
-        <!-- Theme Page -->
         <div id="theme-page" class="page">
           <div class="container">
-            <!-- Mode settings -->
             <mdui-card variant="elevated" class="compact-card">
               <div style="padding: 16px">
                 <h3
@@ -1464,7 +1391,6 @@
               </div>
             </mdui-card>
 
-            <!-- Theme color settings -->
             <mdui-card
               variant="elevated"
               class="compact-card"
@@ -1571,7 +1497,6 @@
               </div>
             </mdui-card>
 
-            <!-- Monet color settings -->
             <mdui-card
               variant="elevated"
               class="compact-card"
@@ -1622,7 +1547,6 @@
 
       </mdui-layout-main>
 
-      <!-- Bottom Navigation -->
       <mdui-navigation-bar value="status" id="nav-bar">
         <mdui-navigation-bar-item
           icon="home"
@@ -1649,14 +1573,12 @@
       </mdui-navigation-bar>
     </mdui-layout>
 
-    <!-- FAB Start/Stop Button (Global) -->
     <div class="dashboard-fab" id="dashboard-fab">
       <mdui-fab id="service-fab" icon="play_arrow" extended>
         <span class="fab-runtime" id="fab-runtime"></span>
       </mdui-fab>
     </div>
 
-    <!-- Delete confirmation dialog -->
     <mdui-dialog
       id="confirm-dialog"
       close-on-esc
@@ -1692,7 +1614,6 @@
       </div>
     </mdui-dialog>
 
-    <!-- Node Link Import Dialog -->
     <mdui-dialog
       id="node-link-dialog"
       headline="Import Node Link"
@@ -1722,7 +1643,6 @@
       >
     </mdui-dialog>
 
-    <!-- Subscription Dialog -->
     <mdui-dialog
       id="subscription-dialog"
       headline="Add Subscription"
@@ -1762,7 +1682,6 @@
       >
     </mdui-dialog>
 
-    <!-- Config Editor Dialog -->
     <mdui-dialog
       id="config-dialog"
       headline="Edit Config"
@@ -1801,7 +1720,6 @@
       >
     </mdui-dialog>
 
-    <!-- UID Add Dialog -->
     <mdui-dialog
       id="uid-dialog"
       headline="Add UID"
@@ -1834,7 +1752,6 @@
       >
     </mdui-dialog>
 
-    <!-- App Selector Dialog -->
     <mdui-dialog
       id="app-selector-dialog"
       headline="Select Apps"
@@ -1904,7 +1821,6 @@
       >
     </mdui-dialog>
 
-    <!-- Routing Rule Dialog -->
     <mdui-dialog
       id="routing-rule-dialog"
       headline="Routing Rules"
@@ -2010,7 +1926,6 @@
       >
     </mdui-dialog>
 
-    <!-- Clash Rules Import Dialog -->
     <mdui-dialog
       id="clash-import-dialog"
       headline="Import Clash Rules"
@@ -2088,7 +2003,6 @@
       >
     </mdui-dialog>
 
-    <!-- DNS Server Dialog -->
     <mdui-dialog
       id="dns-server-dialog"
       headline="DNS Server"
@@ -2156,7 +2070,6 @@
       >
     </mdui-dialog>
 
-    <!-- DNS Host Dialog -->
     <mdui-dialog
       id="dns-host-dialog"
       headline="Static Host"

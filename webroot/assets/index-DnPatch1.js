@@ -109,8 +109,7 @@ EOF
                         <div class="skeleton skeleton-text" style="width: 50%; height: 16px;"></div>
                         <div class="skeleton skeleton-text" style="width: 70%; height: 12px;"></div>
                     </div>
-                `,e.appendChild(t)}}updateAllPages(){try{this.statusPage.update()}catch(e){console.error(`Error in updateAllPages:`,e)}}async showConfigDialog(e=null){await this.configPage.showDialog(e)}};/* ---- NetProxy: "Copy link" support (outbound JSON -> share link) ---- */
-function ccB64(s,urlSafe){let b=btoa(unescape(encodeURIComponent(s)));return urlSafe?b.replace(/\+/g,`-`).replace(/\//g,`_`).replace(/=+$/,``):b}
+                `,e.appendChild(t)}}updateAllPages(){try{this.statusPage.update()}catch(e){console.error(`Error in updateAllPages:`,e)}}async showConfigDialog(e=null){await this.configPage.showDialog(e)}};function ccB64(s,urlSafe){let b=btoa(unescape(encodeURIComponent(s)));return urlSafe?b.replace(/\+/g,`-`).replace(/\//g,`_`).replace(/=+$/,``):b}
 function ccFirst(x){return Array.isArray(x)?x[0]:x}
 function ccHost(h){return h&&h.includes(`:`)&&!h.startsWith(`[`)?`[${h}]`:h}
 function ccQuery(o){let a=[];for(let k in o){let v=o[k];v!==void 0&&v!==null&&v!==``&&a.push(`${k}=${encodeURIComponent(v)}`)}return a.join(`&`)}
@@ -194,5 +193,4 @@ function ccMenuItem(dd,path,name){
   });
   return it
 }
-/* ---- end Copy link ---- */
 function A(){window.ksu===void 0?setTimeout(()=>{new k},500):new k}document.readyState===`loading`?document.addEventListener(`DOMContentLoaded`,A):A();

@@ -1,49 +1,29 @@
 #!/bin/sh
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-# Version (use YY.MM.DD format)
 readonly SCRIPT_VERSION="v26.11.23"
 
-# Configuration (modify as needed)
-
-# Proxy core configuration
-# Proxy running user and group
 readonly DEFAULT_CORE_USER_GROUP="root:net_admin"
-# Proxy traffic mark
 readonly DEFAULT_ROUTING_MARK=""
 readonly DEFAULT_FORCE_MARK_BYPASS=0
-# Proxy ports (transparent proxy listening ports)
 readonly DEFAULT_PROXY_TCP_PORT="12345"
 readonly DEFAULT_PROXY_UDP_PORT="12345"
 
-# Proxy mode: 0=auto (check TPROXY support), 1=force TPROXY, 2=force REDIRECT
 readonly DEFAULT_PROXY_MODE=0
 
-# Performance mode (0=normal, 1=performance optimized)
-# When enabled, may enable some features (e.g. conntrack) for better speed
 readonly DEFAULT_PERFORMANCE_MODE=0
 
-# DNS configuration
-# DNS hijack method (0: disabled, 1: tproxy, 2: redirect)
 readonly DEFAULT_DNS_HIJACK_ENABLE=1
-# DNS listening port
 readonly DEFAULT_DNS_PORT="1053"
 
-# Interface definitions
-# Mobile data interface
 readonly DEFAULT_MOBILE_INTERFACE="rmnet_data+"
-# WiFi interface
 readonly DEFAULT_WIFI_INTERFACE="wlan0"
-# Hotspot interface
 readonly DEFAULT_HOTSPOT_INTERFACE="wlan2"
-# USB tethering interface
 readonly DEFAULT_USB_INTERFACE="rndis+"
 
-# Other interfaces that require bypassing or proxying. Multiple interfaces can be separated by spaces
 readonly DEFAULT_OTHER_BYPASS_INTERFACES=""
 readonly DEFAULT_OTHER_PROXY_INTERFACES=""
 
-# Proxy switches
 readonly DEFAULT_PROXY_MOBILE=1
 readonly DEFAULT_PROXY_WIFI=1
 readonly DEFAULT_PROXY_HOTSPOT=0
@@ -51,62 +31,39 @@ readonly DEFAULT_PROXY_USB=0
 readonly DEFAULT_PROXY_TCP=1
 readonly DEFAULT_PROXY_UDP=1
 
-# IPv6 proxy control:
-#  0 = disable proxy (but IPv6 stack remains active)
-#  1 = enable proxy (normal IPv6 proxy)
-# -1 = force disable IPv6 stack entirely (disable_ipv6=1 on all interfaces)
 readonly DEFAULT_PROXY_IPV6=0
 
-# The use of 100.0.0.0/8 instead of 100.64.0.0/10 is purely due to a mistake by China Telecom's service provider, and you can change it back
 readonly DEFAULT_BYPASS_IPv4_LIST="0.0.0.0/8 10.0.0.0/8 100.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24 192.88.99.0/24 192.168.0.0/16 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4 255.255.255.255/32"
 readonly DEFAULT_BYPASS_IPv6_LIST="::/128 ::1/128 ::ffff:0:0/96 100::/64 64:ff9b::/96 2001::/32 2001:10::/28 2001:20::/28 2001:db8::/32 2002::/16 fe80::/10 ff00::/8"
 readonly DEFAULT_PROXY_IPv4_LIST=""
 readonly DEFAULT_PROXY_IPv6_LIST=""
 
-# Hotspot subnet when WiFi and hotspot share the same interface (common on older devices)
-# Only used when HOTSPOT_INTERFACE == WIFI_INTERFACE
 readonly DEFAULT_HOTSPOT_SUBNET_IPV4="192.168.43.0/24"
 readonly DEFAULT_HOTSPOT_SUBNET_IPV6="fe80::/10"
 
-# Mark values
 readonly DEFAULT_MARK_VALUE=20
 readonly DEFAULT_MARK_VALUE6=25
 
-# Routing table ID
 readonly DEFAULT_TABLE_ID=2025
 
-# Per-app proxy (use space to separate package names, supports user:package format)
 readonly DEFAULT_APP_PROXY_ENABLE=0
 readonly DEFAULT_PROXY_APPS_LIST=""
-# Example: "com.example.app com.other"
 readonly DEFAULT_BYPASS_APPS_LIST=""
-# Example: "com.android.shell"
 readonly DEFAULT_APP_PROXY_MODE="blacklist"
-# "blacklist" or "whitelist"
 
-# CN IP bypass configuration
 readonly DEFAULT_BYPASS_CN_IP=0
-# CN IP list file name
 readonly DEFAULT_CN_IP_FILE="cn.zone"
 readonly DEFAULT_CN_IPV6_FILE="cn_ipv6.zone"
-# CN IP source URLs
 readonly DEFAULT_CN_IP_URL="https://raw.githubusercontent.com/Hackl0us/GeoIP2-CN/release/CN-ip-cidr.txt"
 readonly DEFAULT_CN_IPV6_URL="https://ispip.clang.cn/all_cn_ipv6.txt"
 
-# MAC address blacklist/whitelist configuration (hotspot mode)
 readonly DEFAULT_MAC_FILTER_ENABLE=0
-# MAC address blacklist/whitelist (use space to separate MAC addresses)
 readonly DEFAULT_PROXY_MACS_LIST=""
-# Example: "AA:BB:CC:DD:EE:FF 11:22:33:44:55:66"
 readonly DEFAULT_BYPASS_MACS_LIST=""
-# Example: "FF:EE:DD:CC:BB:AA"
 readonly DEFAULT_MAC_PROXY_MODE="blacklist"
-# "blacklist" or "whitelist"
 
-# block quic
 readonly DEFAULT_BLOCK_QUIC=0
 
-# Dry-run mode (disabled by default)
 readonly DEFAULT_DRY_RUN=0
 
 log() {
@@ -163,7 +120,6 @@ load_config() {
     log Info "Sourcing configuration file: $CONFIG_DIR/tproxy.conf"
     _cli_dry_run="$DRY_RUN"
     . "$CONFIG_DIR/tproxy.conf"
-    # --dry-run on the command line wins over DRY_RUN in tproxy.conf
     if [ "$_cli_dry_run" -eq 1 ]; then
       DRY_RUN=1
     fi
@@ -325,7 +281,6 @@ init_kernel_config_cache() {
   fi
 }
 
-# Helper: validate a value is a positive integer (zero forks)
 is_positive_integer() {
   case "$1" in
     ''|*[!0-9]*) return 1 ;;
@@ -520,7 +475,6 @@ check_tproxy_support() {
   fi
 }
 
-# Unified command wrapper functions
 run_ipt_command() {
   local cmd="$1"
   shift
@@ -663,8 +617,6 @@ download_file() {
   fi
 }
 
-# Download a CIDR list unless a copy younger than 7 days exists
-# Arguments: <label: IP|IPv6> <file name> <url>
 fetch_cn_list() {
   local label="$1"
   local file="$CONFIG_DIR/$2"
@@ -672,7 +624,6 @@ fetch_cn_list() {
 
   log Info "Checking/Downloading China mainland $label list to $file"
 
-  # Re-download if file doesn't exist or is older than 7 days
   if [ -f "$file" ] && [ -z "$(find "$file" -mtime +7 2> /dev/null)" ]; then
     log Debug "Using existing China $label list: $file"
     return 0
@@ -707,8 +658,6 @@ download_cn_ip_list() {
   fi
 }
 
-# Load a CIDR list file into a new hash:net ipset
-# Arguments: <set name> <inet|inet6> <list file> <file label: IP|IPv6> <CIDR label: IPv4|IPv6>
 load_cn_ipset() {
   local set_name="$1"
   local family="$2"
@@ -792,8 +741,6 @@ setup_cn_ipset() {
   fi
 }
 
-# Helper: add sub-chain jump rules with optional performance mode conntrack optimization
-# Uses dynamic scoping for $cmd and $table from the calling function
 _add_chain_jumps() {
   local parent="$1" perf="$2"
   shift 2
@@ -810,7 +757,7 @@ _add_chain_jumps() {
 
 setup_proxy_chain() {
   local family="$1"
-  local mode="$2" # tproxy or redirect
+  local mode="$2"
   local suffix=""
   local mark="$MARK_VALUE"
   local cmd="iptables"
@@ -821,7 +768,6 @@ setup_proxy_chain() {
     cmd="ip6tables"
   fi
 
-  # Set mode name for logging
   local mode_name="$mode"
   if [ "$mode" = "tproxy" ]; then
     mode_name="TPROXY"
@@ -831,7 +777,6 @@ setup_proxy_chain() {
 
   log Info "Setting up $mode_name chains for IPv${family}"
 
-  # Define chains based on family
   local chains=""
   chains="PROXY_PREROUTING$suffix PROXY_OUTPUT$suffix DIVERT$suffix PROXY_IP$suffix BYPASS_IP$suffix BYPASS_INTERFACE$suffix PROXY_INTERFACE$suffix DNS_HIJACK_PRE$suffix DNS_HIJACK_OUT$suffix APP_CHAIN$suffix MAC_CHAIN$suffix"
 
@@ -840,7 +785,6 @@ setup_proxy_chain() {
     table="nat"
   fi
 
-  # Create chains
   for c in $chains; do
     safe_chain_create "$family" "$table" "$c"
   done
@@ -877,7 +821,6 @@ setup_proxy_chain() {
     log Error "Core traffic bypass not configured, may cause traffic loop"
   fi
 
-  # Pre-check performance mode with conntrack
   local _perf_ct=0
   if [ "$PERFORMANCE_MODE" -eq 1 ] && check_kernel_feature "NETFILTER_XT_MATCH_CONNTRACK"; then
     _perf_ct=1
@@ -1146,7 +1089,6 @@ setup_proxy_chain() {
     fi
   fi
 
-  # Add rules to main chains
   if [ "$PROXY_UDP" -eq 1 ] || [ "$mode" = "redirect" ]; then
     $cmd -t "$table" -I PREROUTING -p udp -j "PROXY_PREROUTING$suffix"
     $cmd -t "$table" -I OUTPUT -p udp -j "PROXY_OUTPUT$suffix"
@@ -1176,15 +1118,12 @@ setup_dns_hijack() {
 
   case "$mode" in
     tproxy)
-      # Handle DNS from interfaces in PREROUTING chain (DNS_HIJACK_PRE)
       $cmd -t mangle -A "DNS_HIJACK_PRE$suffix" -j RETURN
-      # Handle local DNS hijacking in OUTPUT chain (DNS_HIJACK_OUT)
       $cmd -t mangle -A "DNS_HIJACK_OUT$suffix" -j RETURN
 
       log Info "DNS hijack enabled using TPROXY mode"
       ;;
     redirect)
-      # Handle DNS using REDIRECT method
       $cmd -t nat -A "PROXY_PREROUTING$suffix" -p tcp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
       $cmd -t nat -A "PROXY_PREROUTING$suffix" -p udp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
       $cmd -t nat -A "PROXY_OUTPUT$suffix" -p tcp --dport 53 -j REDIRECT --to-ports "$DNS_PORT"
@@ -1192,7 +1131,6 @@ setup_dns_hijack() {
       log Info "DNS hijack enabled using REDIRECT mode to port $DNS_PORT"
       ;;
     redirect2)
-      # Handle DNS using REDIRECT method
       if [ "$family" = "6" ] && {
         ! check_kernel_feature "IP6_NF_NAT" || ! check_kernel_feature "IP6_NF_TARGET_REDIRECT"
       }; then
@@ -1305,7 +1243,6 @@ cleanup_chain() {
     table="nat"
   fi
 
-  # Remove from main chains (symmetric with setup)
   if [ "$PROXY_TCP" -eq 1 ]; then
     $cmd -t "$table" -D PREROUTING -p tcp -j "PROXY_PREROUTING$suffix" 2>/dev/null || true
     $cmd -t "$table" -D OUTPUT -p tcp -j "PROXY_OUTPUT$suffix" 2>/dev/null || true
@@ -1315,16 +1252,13 @@ cleanup_chain() {
     $cmd -t "$table" -D OUTPUT -p udp -j "PROXY_OUTPUT$suffix" 2>/dev/null || true
   fi
 
-  # Define chains based on family
   local chains="PROXY_PREROUTING$suffix PROXY_OUTPUT$suffix DIVERT$suffix PROXY_IP$suffix BYPASS_IP$suffix BYPASS_INTERFACE$suffix PROXY_INTERFACE$suffix DNS_HIJACK_PRE$suffix DNS_HIJACK_OUT$suffix APP_CHAIN$suffix MAC_CHAIN$suffix"
 
-  # Clean up chains
   for c in $chains; do
     $cmd -t "$table" -F "$c" 2>/dev/null || true
     $cmd -t "$table" -X "$c" 2>/dev/null || true
   done
 
-  # Remove DNS rules if applicable
   if [ "$mode" = "tproxy" ] && [ "$DNS_HIJACK_ENABLE" -eq 2 ]; then
     $cmd -t nat -D PREROUTING -i "$MOBILE_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
     $cmd -t nat -D PREROUTING -i "$WIFI_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
@@ -1499,7 +1433,6 @@ stop_proxy() {
   [ "$DRY_RUN" -eq 1 ] || rm -f "$CONFIG_DIR/runtime_tproxy.conf" 2> /dev/null
 }
 
-# This rule blocks local access to tproxy-port to prevent traffic loopback.
 block_loopback_traffic() {
   case "$1" in
     enable)
@@ -1623,7 +1556,6 @@ manage_ipv6() {
     log Info "Restoring IPv6 settings from $ipv6_backup_file"
 
     while IFS='=' read -r key value; do
-      # Skip comments and empty lines
       case "$key" in
         \#* | "") continue ;;
       esac
@@ -1858,7 +1790,6 @@ main() {
   esac
 }
 
-# Pre-initialize variables for set -u safety
 DRY_RUN=0
 VERBOSE=0
 CONFIG_DIR=""

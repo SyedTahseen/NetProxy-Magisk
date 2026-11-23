@@ -1,6 +1,4 @@
 #!/system/bin/sh
-# NetProxy service management script
-# Usage: service.sh {start|stop|restart|status}
 
 set -u
 
@@ -13,7 +11,6 @@ readonly CONFDIR="$MODDIR/config/xray/confdir"
 
 readonly KILL_TIMEOUT=5
 
-# Detect the busybox path
 detect_busybox() {
   local path
   for path in "/data/adb/ksu/bin/busybox" "/data/adb/ap/bin/busybox" "/data/adb/magisk/busybox"; do
@@ -27,21 +24,14 @@ detect_busybox() {
 
 readonly BUSYBOX="$(detect_busybox)"
 
-# Import the utility library
 . "$MODDIR/scripts/utils/log.sh"
 
 export PATH="$MODDIR/bin:$PATH"
 
-#######################################
-# Get the Xray PID
-#######################################
 get_pid() {
   pidof -s "$XRAY_BIN" 2> /dev/null || true
 }
 
-#######################################
-# Start service
-#######################################
 do_start() {
   log "INFO" "========== Starting Xray Service =========="
 
@@ -62,7 +52,6 @@ do_start() {
   local outbound_mode="${OUTBOUND_MODE:-rule}"
   log "INFO" "Current outbound mode: $outbound_mode"
 
-  # Determine the routing config
   local routing_config
   case "$outbound_mode" in
     global) routing_config="$CONFDIR/routing/global.json" ;;
@@ -78,7 +67,6 @@ do_start() {
   log "INFO" "Routing config: $routing_config"
   log "INFO" "Outbound config: $outbound_config"
 
-  # Start Xray (root:net_admin)
   nohup "$BUSYBOX" setuidgid root:net_admin "$XRAY_BIN" run \
     -confdir "$CONFDIR" \
     -config "$routing_config" \
@@ -88,14 +76,12 @@ do_start() {
   local xray_pid=$!
   log "INFO" "Xray process started, PID: $xray_pid"
 
-  # Wait for the process to stabilize
   sleep 1
 
   if ! kill -0 "$xray_pid" 2> /dev/null; then
     die "Xray process failed to start, please check the config"
   fi
 
-  # Enable TProxy rules
   if ! "$MODDIR/scripts/network/tproxy.sh" start -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1; then
     log "WARN" "TProxy rule setup reported errors, traffic may not be proxied (see $LOG_FILE)"
   fi
@@ -103,18 +89,13 @@ do_start() {
   log "INFO" "========== Xray Service Started =========="
 }
 
-#######################################
-# Stop service
-#######################################
 do_stop() {
   log "INFO" "========== Stopping Xray Service =========="
 
-  # Clean up the TProxy rules first (avoids losing connectivity)
   log "INFO" "Cleaning up TProxy rules..."
   "$MODDIR/scripts/network/tproxy.sh" stop -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1 \
     || log "WARN" "TProxy rule cleanup reported errors"
 
-  # Terminate the Xray process
   local pid
   pid=$(get_pid)
 
@@ -123,7 +104,6 @@ do_stop() {
   else
     log "INFO" "Terminating Xray process (PID: $pid)..."
 
-    # Graceful termination
     if kill "$pid" 2> /dev/null; then
       local count=0
       while kill -0 "$pid" 2> /dev/null && [ "$count" -lt "$KILL_TIMEOUT" ]; do
@@ -131,7 +111,6 @@ do_stop() {
         count=$((count + 1))
       done
 
-      # Force termination
       if kill -0 "$pid" 2> /dev/null; then
         log "WARN" "Process did not respond to SIGTERM, sending SIGKILL"
         kill -9 "$pid" 2> /dev/null || true
@@ -144,9 +123,6 @@ do_stop() {
   log "INFO" "========== Xray Service Stopped =========="
 }
 
-#######################################
-# Restart service
-#######################################
 do_restart() {
   log "INFO" "========== Restarting Xray Service =========="
   do_stop
@@ -154,16 +130,12 @@ do_restart() {
   do_start
 }
 
-#######################################
-# Show status
-#######################################
 do_status() {
   local pid
   pid=$(get_pid)
 
   if [ -n "$pid" ]; then
     echo "Xray is running (PID: $pid)"
-    # Show uptime
     if [ -f "/proc/$pid/stat" ]; then
       local uptime_ticks start_time now_ticks
       start_time=$(awk '{print $22}' "/proc/$pid/stat" 2> /dev/null || echo 0)
@@ -180,9 +152,6 @@ do_status() {
   fi
 }
 
-#######################################
-# Show help
-#######################################
 show_usage() {
   cat << EOF
 Usage: $(basename "$0") {start|stop|restart|status}
@@ -199,9 +168,6 @@ Examples:
 EOF
 }
 
-#######################################
-# Entry point
-#######################################
 main() {
   case "${1:-}" in
     start)

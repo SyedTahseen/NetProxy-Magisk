@@ -1,17 +1,5 @@
 #!/system/bin/sh
-#############################################################################
-# SOCKS base64 credential fix
-#
-# proxylink does not decode the v2rayN style link
-#   socks://base64(user:pass)@host:port#name
-# and writes the base64 string as the username with an empty password.
-#
-# Usage:
-#   socks-fix.sh link <node-link>   print the link with plain user:pass
-#   socks-fix.sh json <file>...     fix already generated outbound files
-#############################################################################
 
-# Decode base64 / base64url (with or without padding). Prints nothing on failure.
 b64_decode() {
   local s pad
   s=$(printf '%s' "$1" | sed 's/%3[dD]/=/g' | tr '_-' '/+' | tr -d '=')
@@ -28,10 +16,8 @@ url_encode() {
   printf '%s' "$1" | sed 's/%/%25/g; s/@/%40/g; s/\//%2F/g; s/#/%23/g; s/?/%3F/g; s/:/%3A/g'
 }
 
-# Rewrite socks://base64@host to socks://user:pass@host (other links unchanged)
 fix_link() {
   local link="$1" rest userinfo after dec user pass
-  # socks5:// and socks5h:// are the same as socks:// (Xray only speaks SOCKS5)
   case "$link" in
     socks5h://*) link="socks://${link#socks5h://}" ;;
     socks5://*) link="socks://${link#socks5://}" ;;
@@ -47,7 +33,6 @@ fix_link() {
   case "$rest" in
     *@*) ;;
     *)
-      # Provider style: socks://host:port:user:pass[#name]
       local frag="" body="$rest" host r port cred
       case "$rest" in
         *'#'*)
@@ -79,7 +64,6 @@ fix_link() {
   esac
   userinfo="${rest%%@*}"
   after="${rest#*@}"
-  # Already plain (user:pass or contains percent-encoding of a colon)
   case "$userinfo" in
     *:* | *%3[aA]*)
       printf '%s' "$link"
@@ -97,14 +81,12 @@ fix_link() {
   esac
 }
 
-# Fix one generated outbound file in place
 fix_json_file() {
   local file="$1" tmp="$1.fixtmp" held="" line user_b64 dec user pass indent changed=0
   [ -f "$file" ] || return 0
   : > "$tmp"
   while IFS= read -r line || [ -n "$line" ]; do
     if [ -n "$held" ]; then
-      # $held is a "user" line; $line should be the "pass" line
       case "$line" in
         *'"pass"'*'""'*)
           user_b64=$(printf '%s' "$held" | sed -n 's/.*"user"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
@@ -113,7 +95,6 @@ fix_json_file() {
             *:*)
               user="${dec%%:*}"
               pass="${dec#*:}"
-              # JSON-escape backslash and double quote
               user=$(printf '%s' "$user" | sed 's/\\/\\\\/g; s/"/\\"/g')
               pass=$(printf '%s' "$pass" | sed 's/\\/\\\\/g; s/"/\\"/g')
               printf '%s\n' "$held" | sed "s|\"user\"\([[:space:]]*\):\([[:space:]]*\)\"[^\"]*\"|\"user\"\1:\2\"$(printf '%s' "$user" | sed 's/[|&\\]/\\&/g')\"|" >> "$tmp"

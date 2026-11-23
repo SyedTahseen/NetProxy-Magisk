@@ -1,17 +1,8 @@
 #!/system/bin/sh
 
-#############################################################################
-# NetProxy CLI - command-line control tool
-# Manage NetProxy through adb shell
-#
-# Usage: adb shell su -c "/data/adb/modules/netproxy/scripts/cli <command> [args]"
-# Run "cli help" for the list of commands.
-#############################################################################
-
 set -e
 set -u
 
-# Path configuration
 MODDIR="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPTS_DIR="$MODDIR/scripts"
 CONFIG_DIR="$MODDIR/config"
@@ -25,15 +16,11 @@ XRAY_BIN="$MODDIR/bin/xray"
 
 . "$SCRIPTS_DIR/utils/common.sh"
 
-# Colored output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-#######################################
-# Output functions
-#######################################
 info() {
   printf "${GREEN}[INFO]${NC} %s\n" "$1"
 }
@@ -47,11 +34,6 @@ error() {
   exit 1
 }
 
-#######################################
-# Helpers
-#######################################
-
-# Print the PID of the running Xray process (empty if not running)
 get_pid() {
   pidof -s "$XRAY_BIN" 2> /dev/null || true
 }
@@ -60,14 +42,10 @@ is_running() {
   [ -n "$(get_pid)" ]
 }
 
-# Full path of the config currently in use
 current_config() {
   conf_get "$MODULE_CONF" "CURRENT_CONFIG"
 }
 
-# Resolve a config name (with or without .json) to a file path.
-# Looks in the default group first, then in the subscription groups.
-# Prints nothing if the config cannot be found.
 find_config() {
   local name="$1" dir candidate
   for dir in "$DEFAULT_GROUP_DIR" "$OUTBOUNDS_DIR" "$OUTBOUNDS_DIR"/sub_*; do
@@ -82,7 +60,6 @@ find_config() {
   return 0
 }
 
-# Like find_config, but aborts with an error when nothing matches
 require_config() {
   local name="${1:-}" path
   [ -n "$name" ] || error "Please specify a config name"
@@ -91,7 +68,6 @@ require_config() {
   echo "$path"
 }
 
-# Print one config entry of the list view, highlighting the active one
 print_config_entry() {
   local file="$1" current="$2" name
   name=$(basename "$file")
@@ -102,7 +78,6 @@ print_config_entry() {
   fi
 }
 
-# Name of the per-app list that is active for the current app proxy mode
 app_list_key() {
   if [ "$(conf_get "$TPROXY_CONF" "APP_PROXY_MODE" "blacklist")" = "blacklist" ]; then
     echo "BYPASS_APPS_LIST"
@@ -111,7 +86,6 @@ app_list_key() {
   fi
 }
 
-# Re-apply the transparent proxy rules (only when the service is running)
 reload_rules() {
   if is_running; then
     info "Reloading proxy rules..."
@@ -122,9 +96,6 @@ reload_rules() {
   fi
 }
 
-#######################################
-# Service status
-#######################################
 cmd_status() {
   echo "=============================="
   echo "       NetProxy Status"
@@ -161,9 +132,6 @@ cmd_status() {
   echo "=============================="
 }
 
-#######################################
-# Service control
-#######################################
 cmd_start() {
   if is_running; then
     warn "Service is already running"
@@ -198,9 +166,6 @@ cmd_restart() {
   info "Service restarted successfully"
 }
 
-#######################################
-# Config management
-#######################################
 cmd_config() {
   local subcmd="${1:-}"
   shift 2> /dev/null || true
@@ -266,7 +231,6 @@ cmd_config() {
 
       info "Parsing node link..."
       mkdir -p "$DEFAULT_GROUP_DIR"
-      # import-link.sh decodes base64 socks:// credentials, then calls proxylink
       if sh "$SCRIPTS_DIR/utils/import-link.sh" "$node_link"; then
         info "Node added successfully"
       else
@@ -315,9 +279,6 @@ Commands:
 EOF
 }
 
-#######################################
-# Subscription management
-#######################################
 cmd_sub() {
   local subcmd="${1:-}"
   shift 2> /dev/null || true
@@ -360,9 +321,6 @@ EOF
   esac
 }
 
-#######################################
-# Per-app proxy settings (stored in config/tproxy/tproxy.conf)
-#######################################
 cmd_proxy() {
   local subcmd="${1:-}"
   shift 2> /dev/null || true
@@ -407,7 +365,6 @@ cmd_proxy() {
       local apps count=0
       apps=$(conf_get "$TPROXY_CONF" "$key")
       for pkg in $apps; do
-        # Entries may use the "user:package" form
         uid=$(awk -v pkg="${pkg#*:}" '$1==pkg {print $2}' /data/system/packages.list 2> /dev/null) || uid=""
         if [ -n "$uid" ]; then
           echo "  $pkg (UID: $uid)"
@@ -485,9 +442,6 @@ EOF
   esac
 }
 
-#######################################
-# Show help
-#######################################
 show_help() {
   cat << 'EOF'
 NetProxy CLI - command-line control tool
@@ -533,9 +487,6 @@ Examples:
 EOF
 }
 
-#######################################
-# Main program
-#######################################
 main() {
   local cmd="${1:-}"
   shift 2> /dev/null || true
