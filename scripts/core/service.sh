@@ -1,0 +1,229 @@
+#!/system/bin/sh
+# NetProxy service management script
+# Usage: service.sh {start|stop|restart|status}
+
+set -u
+
+readonly MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
+readonly LOG_FILE="$MODDIR/logs/service.log"
+readonly XRAY_BIN="$MODDIR/bin/xray"
+readonly MODULE_CONF="$MODDIR/config/module.conf"
+readonly XRAY_LOG_FILE="$MODDIR/logs/xray.log"
+readonly CONFDIR="$MODDIR/config/xray/confdir"
+
+readonly KILL_TIMEOUT=5
+
+# Detect the busybox path
+detect_busybox() {
+  local path
+  for path in "/data/adb/ksu/bin/busybox" "/data/adb/ap/bin/busybox" "/data/adb/magisk/busybox"; do
+    if [ -f "$path" ]; then
+      echo "$path"
+      return 0
+    fi
+  done
+  echo "busybox"
+}
+
+readonly BUSYBOX="$(detect_busybox)"
+
+# Import the utility library
+. "$MODDIR/scripts/utils/log.sh"
+
+export PATH="$MODDIR/bin:$PATH"
+
+#######################################
+# Get the Xray PID
+#######################################
+get_pid() {
+  pidof -s "$XRAY_BIN" 2> /dev/null || true
+}
+
+#######################################
+# Start service
+#######################################
+do_start() {
+  log "INFO" "========== Starting Xray Service =========="
+
+  local running_pid
+  running_pid=$(get_pid)
+  if [ -n "$running_pid" ]; then
+    log "WARN" "Xray is already running (PID: $running_pid)"
+    return 0
+  fi
+
+  [ -f "$MODULE_CONF" ] || die "Module config file does not exist: $MODULE_CONF"
+  . "$MODULE_CONF"
+
+  local outbound_config
+  outbound_config=$(printf '%s' "${CURRENT_CONFIG:-}" | tr -d '"')
+  [ -n "$outbound_config" ] || die "Unable to resolve the outbound config path"
+
+  local outbound_mode="${OUTBOUND_MODE:-rule}"
+  log "INFO" "Current outbound mode: $outbound_mode"
+
+  # Determine the routing config
+  local routing_config
+  case "$outbound_mode" in
+    global) routing_config="$CONFDIR/routing/global.json" ;;
+    direct) routing_config="$CONFDIR/routing/direct.json" ;;
+    *) routing_config="$CONFDIR/routing/rule.json" ;;
+  esac
+
+  [ -f "$routing_config" ] || die "Routing config file does not exist: $routing_config"
+  [ -f "$outbound_config" ] || die "Outbound config file does not exist: $outbound_config"
+  [ -d "$CONFDIR" ] || die "confdir directory does not exist: $CONFDIR"
+
+  log "INFO" "Config directory: $CONFDIR"
+  log "INFO" "Routing config: $routing_config"
+  log "INFO" "Outbound config: $outbound_config"
+
+  # Start Xray (root:net_admin)
+  nohup "$BUSYBOX" setuidgid root:net_admin "$XRAY_BIN" run \
+    -confdir "$CONFDIR" \
+    -config "$routing_config" \
+    -config "$outbound_config" \
+    > "$XRAY_LOG_FILE" 2>&1 &
+
+  local xray_pid=$!
+  log "INFO" "Xray process started, PID: $xray_pid"
+
+  # Wait for the process to stabilize
+  sleep 1
+
+  if ! kill -0 "$xray_pid" 2> /dev/null; then
+    die "Xray process failed to start, please check the config"
+  fi
+
+  # Enable TProxy rules
+  if ! "$MODDIR/scripts/network/tproxy.sh" start -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1; then
+    log "WARN" "TProxy rule setup reported errors, traffic may not be proxied (see $LOG_FILE)"
+  fi
+
+  log "INFO" "========== Xray Service Started =========="
+}
+
+#######################################
+# Stop service
+#######################################
+do_stop() {
+  log "INFO" "========== Stopping Xray Service =========="
+
+  # Clean up the TProxy rules first (avoids losing connectivity)
+  log "INFO" "Cleaning up TProxy rules..."
+  "$MODDIR/scripts/network/tproxy.sh" stop -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1 \
+    || log "WARN" "TProxy rule cleanup reported errors"
+
+  # Terminate the Xray process
+  local pid
+  pid=$(get_pid)
+
+  if [ -z "$pid" ]; then
+    log "INFO" "No running Xray process found"
+  else
+    log "INFO" "Terminating Xray process (PID: $pid)..."
+
+    # Graceful termination
+    if kill "$pid" 2> /dev/null; then
+      local count=0
+      while kill -0 "$pid" 2> /dev/null && [ "$count" -lt "$KILL_TIMEOUT" ]; do
+        sleep 1
+        count=$((count + 1))
+      done
+
+      # Force termination
+      if kill -0 "$pid" 2> /dev/null; then
+        log "WARN" "Process did not respond to SIGTERM, sending SIGKILL"
+        kill -9 "$pid" 2> /dev/null || true
+      fi
+    fi
+
+    log "INFO" "Xray process terminated"
+  fi
+
+  log "INFO" "========== Xray Service Stopped =========="
+}
+
+#######################################
+# Restart service
+#######################################
+do_restart() {
+  log "INFO" "========== Restarting Xray Service =========="
+  do_stop
+  sleep 1
+  do_start
+}
+
+#######################################
+# Show status
+#######################################
+do_status() {
+  local pid
+  pid=$(get_pid)
+
+  if [ -n "$pid" ]; then
+    echo "Xray is running (PID: $pid)"
+    # Show uptime
+    if [ -f "/proc/$pid/stat" ]; then
+      local uptime_ticks start_time now_ticks
+      start_time=$(awk '{print $22}' "/proc/$pid/stat" 2> /dev/null || echo 0)
+      now_ticks=$(awk '{print int($1 * 100)}' /proc/uptime 2> /dev/null || echo 0)
+      if [ "$start_time" -gt 0 ] && [ "$now_ticks" -gt 0 ]; then
+        uptime_ticks=$((now_ticks - start_time))
+        echo "Uptime: $((uptime_ticks / 100)) seconds"
+      fi
+    fi
+    return 0
+  else
+    echo "Xray is not running"
+    return 1
+  fi
+}
+
+#######################################
+# Show help
+#######################################
+show_usage() {
+  cat << EOF
+Usage: $(basename "$0") {start|stop|restart|status}
+
+Commands:
+  start     Start the Xray service
+  stop      Stop the Xray service
+  restart   Restart the Xray service
+  status    Show service status
+
+Examples:
+  $(basename "$0") start
+  $(basename "$0") restart
+EOF
+}
+
+#######################################
+# Entry point
+#######################################
+main() {
+  case "${1:-}" in
+    start)
+      do_start
+      ;;
+    stop)
+      do_stop
+      ;;
+    restart)
+      do_restart
+      ;;
+    status)
+      do_status
+      ;;
+    -h | --help | help)
+      show_usage
+      ;;
+    *)
+      show_usage
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"
