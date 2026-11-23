@@ -546,7 +546,7 @@ cmd_proxy() {
                         
                         if is_running; then
                             info "Reloading proxy rules..."
-                            sh "$SCRIPTS_DIR/network/tproxy.sh" renew
+                            sh "$SCRIPTS_DIR/network/tproxy.sh" restart -d "$CONFIG_DIR/tproxy"
                             info "Rules applied"
                         else
                             info "Service is not running, takes effect on next start"
@@ -627,7 +627,7 @@ cmd_proxy() {
             
             if is_running; then
                 info "Reloading proxy rules..."
-                sh "$SCRIPTS_DIR/network/tproxy.sh" renew
+                sh "$SCRIPTS_DIR/network/tproxy.sh" restart -d "$CONFIG_DIR/tproxy"
                 info "Rules applied"
             fi
             ;;
@@ -653,7 +653,7 @@ cmd_proxy() {
             
             if is_running; then
                 info "Reloading proxy rules..."
-                sh "$SCRIPTS_DIR/network/tproxy.sh" renew
+                sh "$SCRIPTS_DIR/network/tproxy.sh" restart -d "$CONFIG_DIR/tproxy"
                 info "Rules applied"
             fi
             ;;
@@ -664,7 +664,7 @@ cmd_proxy() {
             fi
             
             info "Reloading proxy rules..."
-            sh "$SCRIPTS_DIR/network/tproxy.sh" renew
+            sh "$SCRIPTS_DIR/network/tproxy.sh" restart -d "$CONFIG_DIR/tproxy"
             info "Rules applied"
             ;;
         
