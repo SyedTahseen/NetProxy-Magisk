@@ -12,5 +12,5 @@ config/tproxy/tmp/
 config/.sub_status
 config/xray/outbounds/.tmp_*
 
-# Build out
+# Build output
 *.zip
