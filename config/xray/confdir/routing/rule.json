@@ -19,13 +19,6 @@
             },
             {
                 "type": "field",
-                "domain": [
-                    "ext:geosite-ads.dat:awavenue-ads"
-                ],
-                "outboundTag": "block"
-            },
-            {
-                "type": "field",
                 "port": "443",
                 "network": "udp",
                 "outboundTag": "block"

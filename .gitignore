@@ -1,6 +1,0 @@
-# The Xray core is downloaded by the GitHub workflow at build time
-bin/xray
-bin/xray.bak
-bin/.tmp/
-# Build output
-*.zip

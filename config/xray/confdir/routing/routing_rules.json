@@ -21,16 +21,6 @@
         "visible": false
     },
     {
-        "name": "AWAvenue (Qiufeng) ad rules v1.6.9",
-        "type": "field",
-        "domain": [
-            "ext:geosite-ads.dat:awavenue-ads"
-        ],
-        "outboundTag": "block",
-        "enabled": true,
-        "visible": true
-    },
-    {
         "name": "Block UDP 443",
         "type": "field",
         "port": "443",
