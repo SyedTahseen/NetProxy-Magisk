@@ -31,6 +31,11 @@ url_encode() {
 # Rewrite socks://base64@host to socks://user:pass@host (other links unchanged)
 fix_link() {
   local link="$1" rest userinfo after dec user pass
+  # socks5:// and socks5h:// are the same as socks:// (Xray only speaks SOCKS5)
+  case "$link" in
+    socks5h://*) link="socks://${link#socks5h://}" ;;
+    socks5://*) link="socks://${link#socks5://}" ;;
+  esac
   case "$link" in
     socks://*) ;;
     *)
