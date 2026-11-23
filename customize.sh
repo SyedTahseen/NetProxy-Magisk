@@ -37,6 +37,8 @@ readonly EXECUTABLE_FILES="
     scripts/network/tproxy.sh
     scripts/config/subscription.sh
     scripts/utils/update-xray.sh
+    scripts/utils/socks-fix.sh
+    scripts/utils/import-link.sh
     scripts/utils/oneplus_a16_fix.sh
 "
 

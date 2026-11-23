@@ -266,9 +266,8 @@ cmd_config() {
 
       info "Parsing node link..."
       mkdir -p "$DEFAULT_GROUP_DIR"
-      chmod +x "$MODDIR/bin/proxylink"
-      # proxylink writes the generated node file into the current directory
-      if (cd "$DEFAULT_GROUP_DIR" && "$MODDIR/bin/proxylink" -parse "$node_link" -insecure -format xray -auto); then
+      # import-link.sh decodes base64 socks:// credentials, then calls proxylink
+      if sh "$SCRIPTS_DIR/utils/import-link.sh" "$node_link"; then
         info "Node added successfully"
       else
         error "Failed to add node"

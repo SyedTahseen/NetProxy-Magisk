@@ -223,6 +223,9 @@ update_subscription() {
       return 1
     fi
 
+    # Fix SOCKS nodes whose base64 credentials proxylink left undecoded
+    sh "$MODDIR/scripts/utils/socks-fix.sh" json "$tmp_dir"/*.json >> "$LOG_FILE" 2>&1 || true
+
     # Replace the old nodes (keep _meta.json)
     find "$sub_dir" -name "*.json" ! -name "_meta.json" -delete
     find "$tmp_dir" -name "*.json" -exec mv {} "$sub_dir/" \;
