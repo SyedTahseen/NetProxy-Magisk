@@ -40,3 +40,18 @@ die() {
   log "ERROR" "$1"
   exit "${2:-1}"
 }
+
+#######################################
+# Keep log files small: when LOG_FILE exceeds 512 KB, keep only the last 1000 lines.
+# Runs once whenever this file is sourced (i.e. at the start of each script run).
+#######################################
+rotate_log() {
+  [ -n "${LOG_FILE:-}" ] && [ -f "$LOG_FILE" ] || return 0
+  local size
+  size=$(wc -c < "$LOG_FILE" 2> /dev/null | tr -d ' ')
+  if [ "${size:-0}" -gt 524288 ] 2> /dev/null; then
+    tail -n 1000 "$LOG_FILE" > "$LOG_FILE.tmp" 2> /dev/null && mv "$LOG_FILE.tmp" "$LOG_FILE"
+  fi
+  return 0
+}
+rotate_log
