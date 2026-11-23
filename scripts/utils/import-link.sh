@@ -15,6 +15,9 @@ case "$link" in
   *"[Interface]"* | *"[interface]"*)
     exec sh "$MODDIR/scripts/utils/import-wireguard.sh" --text "$link"
     ;;
+  wireguard://* | wg://*)
+    exec sh "$MODDIR/scripts/utils/import-wireguard.sh" "$link"
+    ;;
   /*.conf | /*.CONF)
     exec sh "$MODDIR/scripts/utils/import-wireguard.sh" "$link"
     ;;

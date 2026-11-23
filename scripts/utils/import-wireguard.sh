@@ -25,8 +25,83 @@ tmp_in="${TMPDIR:-/data/local/tmp}/wg_import_$$.conf"
 mkdir -p "$(dirname "$tmp_in")" 2> /dev/null
 trap 'rm -f "$tmp_in"' EXIT
 
+urldecode() {
+  printf '%s' "$1" | sed \
+    -e 's/%2[Bb]/+/g' -e 's/%2[Ff]/\//g' -e 's/%3[Dd]/=/g' -e 's/%2[Cc]/,/g' \
+    -e 's/%3[Aa]/:/g' -e 's/%40/@/g' -e 's/%23/#/g' -e 's/%20/ /g' \
+    -e 's/%5[Bb]/[/g' -e 's/%5[Dd]/]/g' -e 's/%25/%/g'
+}
+
+# wireguard://<privateKey>@host:port?publickey=..&address=..&mtu=..#name
+uri_to_conf() {
+  local uri="$1" rest frag="" query="" base userinfo hostport
+  rest="${uri#*://}"
+  case "$rest" in
+    *'#'*)
+      frag="${rest#*#}"
+      rest="${rest%%#*}"
+      ;;
+  esac
+  case "$rest" in
+    *'?'*)
+      query="${rest#*\?}"
+      rest="${rest%%\?*}"
+      ;;
+  esac
+  base="${rest%/}"
+  case "$base" in
+    *@*) ;;
+    *) die "invalid wireguard link: missing private key" ;;
+  esac
+  userinfo=$(urldecode "${base%@*}")
+  hostport="${base##*@}"
+
+  local pub="" psk="" addr="" mtu="" reserved="" allowed="" keepalive="" pair k v lk
+  local old_ifs="$IFS"
+  IFS='&'
+  for pair in $query; do
+    k="${pair%%=*}"
+    v=$(urldecode "${pair#*=}")
+    lk=$(printf '%s' "$k" | tr 'A-Z' 'a-z' | tr -d '_-')
+    case "$lk" in
+      publickey | peerpublickey) pub="$v" ;;
+      presharedkey | psk) psk="$v" ;;
+      address | ip | localaddress) addr="${addr:+$addr,}$v" ;;
+      mtu) mtu="$v" ;;
+      reserved) reserved="$v" ;;
+      allowedips) allowed="$v" ;;
+      keepalive | persistentkeepalive) keepalive="$v" ;;
+    esac
+  done
+  IFS="$old_ifs"
+
+  [ -n "$pub" ] || die "wireguard link has no publickey parameter"
+  [ -n "$addr" ] || die "wireguard link has no address parameter"
+
+  {
+    echo "[Interface]"
+    echo "PrivateKey = $userinfo"
+    echo "Address = $addr"
+    [ -z "$mtu" ] || echo "MTU = $mtu"
+    [ -z "$reserved" ] || echo "Reserved = $reserved"
+    echo
+    echo "[Peer]"
+    echo "PublicKey = $pub"
+    [ -z "$psk" ] || echo "PresharedKey = $psk"
+    echo "Endpoint = $hostport"
+    echo "AllowedIPs = ${allowed:-0.0.0.0/0, ::/0}"
+    [ -z "$keepalive" ] || echo "PersistentKeepalive = $keepalive"
+  } > "$tmp_in"
+
+  [ -z "$frag" ] || name=$(urldecode "$frag")
+}
+
 name=""
 case "$src" in
+  wireguard://* | wg://*)
+    uri_to_conf "$src"
+    [ -z "${2:-}" ] || name="$2"
+    ;;
   -)
     cat > "$tmp_in"
     name="${2:-}"
