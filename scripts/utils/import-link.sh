@@ -10,6 +10,16 @@ link="${1:-}"
   exit 1
 }
 
+# WireGuard (wg-quick) configs: pasted text or a path to a .conf file
+case "$link" in
+  *"[Interface]"* | *"[interface]"*)
+    exec sh "$MODDIR/scripts/utils/import-wireguard.sh" --text "$link"
+    ;;
+  /*.conf | /*.CONF)
+    exec sh "$MODDIR/scripts/utils/import-wireguard.sh" "$link"
+    ;;
+esac
+
 link=$(sh "$MODDIR/scripts/utils/socks-fix.sh" link "$link")
 
 mkdir -p "$DEFAULT_GROUP_DIR"

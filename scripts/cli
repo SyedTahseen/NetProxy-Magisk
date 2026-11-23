@@ -238,6 +238,16 @@ cmd_config() {
       fi
       ;;
 
+    add-wg)
+      local wg_file="${1:-}"
+      [ -n "$wg_file" ] || error "Usage: cli config add-wg <file.conf> [name]"
+      [ -f "$wg_file" ] || error "File not found: $wg_file"
+
+      info "Importing WireGuard config..."
+      mkdir -p "$DEFAULT_GROUP_DIR"
+      sh "$SCRIPTS_DIR/utils/import-wireguard.sh" "$wg_file" "${2:-}" || error "Failed to import WireGuard config"
+      ;;
+
     remove)
       local config_path
       config_path=$(require_config "${1:-}")
@@ -273,7 +283,9 @@ Commands:
   list                List all configs
   switch <name>       Switch config (supports hot switch)
   current             Show current config
-  add <node-link>     Add node
+  add <node-link>     Add node (also: wireguard:// link or /path/to/wg.conf)
+  add-wg <file.conf> [name]
+                      Import a WireGuard (wg-quick) config
   remove <name>       Delete config
   show <name>         Show config contents
 EOF
@@ -458,7 +470,8 @@ Config management:
   config list             List all configs
   config switch <name>    Switch config (supports hot switch)
   config current          Show current config
-  config add <link>       Add node
+  config add <link>       Add node (link, wireguard:// or /path/to/wg.conf)
+  config add-wg <file> [name]  Import WireGuard (wg-quick) .conf
   config remove <name>    Delete config
   config show <name>      Show config contents
 
@@ -480,6 +493,7 @@ Per-app proxy settings:
 Examples:
   cli status
   cli config add 'vless://uuid@host:port?...#node-name'
+  cli config add-wg /sdcard/Download/wg0.conf my-wireguard
   cli config switch node-name.json
   cli sub add 'ProviderA' 'https://example.com/sub'
   cli proxy mode whitelist
