@@ -23,20 +23,28 @@ echo "==================================="
 echo "       NetProxy Action Script      "
 echo "==================================="
 
-# Main flow
+# Main flow: toggle the service, then report the real outcome
 if is_xray_running; then
   log "INFO" "Xray is running, preparing to stop it..."
   sh "$SERVICE_SCRIPT" stop
-  echo "==================================="
-  echo " Result: NetProxy service stopped"
-  echo "==================================="
+  if is_xray_running; then
+    result="Failed to stop the NetProxy service"
+  else
+    result="NetProxy service stopped"
+  fi
 else
   log "INFO" "Xray is not running, preparing to start it..."
   sh "$SERVICE_SCRIPT" start
-  echo "==================================="
-  echo " Result: NetProxy service started"
-  echo "==================================="
+  if is_xray_running; then
+    result="NetProxy service started"
+  else
+    result="Failed to start the NetProxy service, check logs/service.log"
+  fi
 fi
+
+echo "==================================="
+echo " Result: $result"
+echo "==================================="
 
 # Sleep briefly so the log is fully displayed before exiting
 sleep 1

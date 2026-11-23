@@ -1,9 +1,9 @@
 #!/system/bin/sh
 
 #######################################
-# Standard logging function
+# Standard logging library
 # Usage:
-#   log <message>         -> defaults to INFO level
+#   log <message>          -> defaults to INFO level
 #   log <level> <message>  -> specify the level (INFO, WARN, ERROR, DEBUG)
 # Global variables:
 #   LOG_FILE - log file path (optional)
@@ -21,14 +21,15 @@ log() {
     message="$2"
   fi
 
-  local timestamp
-  timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-  local log_content="[$timestamp] [$level] $message"
+  local log_content
+  log_content="[$(date '+%Y-%m-%d %H:%M:%S')] [$level] $message"
 
-  # If the LOG_FILE variable is non-empty, append to the log file
-  [ -n "${LOG_FILE:-}" ] && echo "$log_content" >> "$LOG_FILE"
+  # Never let a logging failure (e.g. unwritable log file) abort the caller
+  if [ -n "${LOG_FILE:-}" ]; then
+    echo "$log_content" >> "$LOG_FILE" 2> /dev/null || true
+  fi
 
-  # Write the log content to standard error (stderr); this lets the console or a parent process capture the log output
+  # stderr lets the console or a parent process capture the log output
   echo "$log_content" >&2
 }
 
@@ -42,11 +43,15 @@ die() {
 }
 
 #######################################
-# Keep log files small: when LOG_FILE exceeds 512 KB, keep only the last 1000 lines.
+# Prepare the log file: make sure its directory exists, and keep it small
+# (when LOG_FILE exceeds 512 KB only the last 1000 lines are kept).
 # Runs once whenever this file is sourced (i.e. at the start of each script run).
 #######################################
-rotate_log() {
-  [ -n "${LOG_FILE:-}" ] && [ -f "$LOG_FILE" ] || return 0
+init_log() {
+  [ -n "${LOG_FILE:-}" ] || return 0
+  mkdir -p "${LOG_FILE%/*}" 2> /dev/null || true
+  [ -f "$LOG_FILE" ] || return 0
+
   local size
   size=$(wc -c < "$LOG_FILE" 2> /dev/null | tr -d ' ')
   if [ "${size:-0}" -gt 524288 ] 2> /dev/null; then
@@ -54,4 +59,4 @@ rotate_log() {
   fi
   return 0
 }
-rotate_log
+init_log

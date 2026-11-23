@@ -12,7 +12,7 @@ readonly LIVE_DIR="/data/adb/modules/$MODULE_ID"
 readonly CONFIG_DIR="$LIVE_DIR/config"
 readonly BACKUP_DIR="$TMPDIR/netproxy_backup"
 
-# Global state: whether Xray is running
+# Whether Xray was running before the update (so it can be restarted afterwards)
 XRAY_WAS_RUNNING=false
 
 # Config files/directories to preserve (relative to config/)
@@ -28,6 +28,7 @@ readonly PRESERVE_CONFIGS="
 readonly EXECUTABLE_FILES="
     bin/xray
     bin/proxylink
+    bin/ipset
     action.sh
     scripts/cli
     scripts/core/service.sh
@@ -120,6 +121,9 @@ extract_module() {
     return 1
   fi
 
+  # Log files are not shipped; the directory must exist (the WebUI log export reads it)
+  mkdir -p "$MODPATH/logs"
+
   print_ok "Module files extracted"
   return 0
 }
@@ -183,6 +187,7 @@ sync_to_live() {
 
   # Sync non-config files (bin, scripts, webroot, etc.)
   local sync_dirs="bin scripts webroot action.sh service.sh module.prop"
+  local item
 
   for item in $sync_dirs; do
     local src="$MODPATH/$item"
@@ -197,6 +202,8 @@ sync_to_live() {
       fi
     fi
   done
+
+  mkdir -p "$LIVE_DIR/logs"
 
   # Sync new files in the config directory (incremental update)
   if [ -d "$MODPATH/config" ]; then
@@ -251,11 +258,11 @@ cleanup() {
 # Main flow
 ################################################################################
 
+# Extract module.prop first so the version can be shown
+unzip -o "$ZIPFILE" "module.prop" -d "$TMPDIR" > /dev/null 2>&1
+
 print_title "NetProxy - Xray Transparent Proxy"
 ui_print "  Version: $(grep_prop version "$TMPDIR/module.prop" 2> /dev/null || echo "unknown")"
-
-# Extract module.prop to read the version
-unzip -o "$ZIPFILE" "module.prop" -d "$TMPDIR" > /dev/null 2>&1
 
 # Run the installation steps
 if backup_config \

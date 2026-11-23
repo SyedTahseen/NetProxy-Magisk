@@ -79,38 +79,26 @@
 
     <!--
     CSS load order matters!
-    1. mdui.css - MDUI component library base styles (imported from the npm package via app.js)
-    2. material-icons.css - Material Icons icon font (local font, works offline)
-    3. KernelSU insets.css - Edge-to-edge adaptation (injected into the WebView at runtime)
-    4. KernelSU colors.css - Monet color variables (injected into the WebView at runtime)
-    5. monet.css - Maps Monet colors to MDUI variables (must come after colors.css)
-    6. style.css - Custom styles (using the overridden color variables)
+    1. material-icons.css / twemoji.css - local icon and flag fonts (work offline)
+    2. KernelSU insets.css - edge-to-edge adaptation (injected into the WebView at runtime)
+    3. KernelSU colors.css - Monet color variables (injected into the WebView at runtime)
+    4. Bundled mdui / vendor / app styles (the assets/*.css links below; they map the
+       Monet variables to MDUI variables and must come after colors.css)
   -->
 
-    <!-- 1. Material Icons (local font file, works offline) -->
     <link rel="stylesheet" href="/material-icons.css" />
-
-    <!-- Twemoji font (used to display flag emoji) -->
     <link rel="stylesheet" href="/twemoji.css" />
 
-    <!-- 3. KernelSU WebUI edge-to-edge adaptation -->
     <!-- Provided dynamically when running inside the KernelSU/APatch Manager WebView -->
     <link
       rel="stylesheet"
       href="https://mui.kernelsu.org/internal/insets.css"
     />
-
-    <!-- 4. KernelSU Monet dynamic colors -->
-    <!-- Injects system Monet color variables on Android 12+ devices -->
     <link
       rel="stylesheet"
       href="https://mui.kernelsu.org/internal/colors.css"
     />
 
-    <!-- 5. Monet-to-MDUI color mapping -->
-    <!-- This file overrides MDUI's color system with the Monet variables injected by KernelSU -->
-
-    <!-- 6. Custom styles -->
     <script type="module" crossorigin src="/assets/index-DnPatch1.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/mdui-DqMIjDjk.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-D9Wlgj3F.js">

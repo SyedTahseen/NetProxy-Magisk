@@ -10,12 +10,12 @@ readonly XRAY_BIN="$MODDIR/bin/xray"
 readonly MODULE_CONF="$MODDIR/config/module.conf"
 readonly XRAY_LOG_FILE="$MODDIR/logs/xray.log"
 readonly CONFDIR="$MODDIR/config/xray/confdir"
-readonly OUTBOUNDS_DIR="$MODDIR/config/xray/outbounds"
 
 readonly KILL_TIMEOUT=5
 
 # Detect the busybox path
 detect_busybox() {
+  local path
   for path in "/data/adb/ksu/bin/busybox" "/data/adb/ap/bin/busybox" "/data/adb/magisk/busybox"; do
     if [ -f "$path" ]; then
       echo "$path"
@@ -32,7 +32,6 @@ readonly BUSYBOX="$(detect_busybox)"
 
 export PATH="$MODDIR/bin:$PATH"
 
-
 #######################################
 # Get the Xray PID
 #######################################
@@ -46,7 +45,8 @@ get_pid() {
 do_start() {
   log "INFO" "========== Starting Xray Service =========="
 
-  local running_pid=$(get_pid)
+  local running_pid
+  running_pid=$(get_pid)
   if [ -n "$running_pid" ]; then
     log "WARN" "Xray is already running (PID: $running_pid)"
     return 0
@@ -55,22 +55,20 @@ do_start() {
   [ -f "$MODULE_CONF" ] || die "Module config file does not exist: $MODULE_CONF"
   . "$MODULE_CONF"
 
-  local outbound_config="${CURRENT_CONFIG:-}"
-  outbound_config="${outbound_config//\"/}"
+  local outbound_config
+  outbound_config=$(printf '%s' "${CURRENT_CONFIG:-}" | tr -d '"')
   [ -n "$outbound_config" ] || die "Unable to resolve the outbound config path"
 
   local outbound_mode="${OUTBOUND_MODE:-rule}"
   log "INFO" "Current outbound mode: $outbound_mode"
 
   # Determine the routing config
-  local routing_config="$CONFDIR/routing/rule.json"
-  if [ "$outbound_mode" = "global" ]; then
-    routing_config="$CONFDIR/routing/global.json"
-    log "INFO" "Global mode: using global.json"
-  elif [ "$outbound_mode" = "direct" ]; then
-    routing_config="$CONFDIR/routing/direct.json"
-    log "INFO" "Direct mode: using direct.json"
-  fi
+  local routing_config
+  case "$outbound_mode" in
+    global) routing_config="$CONFDIR/routing/global.json" ;;
+    direct) routing_config="$CONFDIR/routing/direct.json" ;;
+    *) routing_config="$CONFDIR/routing/rule.json" ;;
+  esac
 
   [ -f "$routing_config" ] || die "Routing config file does not exist: $routing_config"
   [ -f "$outbound_config" ] || die "Outbound config file does not exist: $outbound_config"
@@ -98,7 +96,9 @@ do_start() {
   fi
 
   # Enable TProxy rules
-  "$MODDIR/scripts/network/tproxy.sh" start -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1
+  if ! "$MODDIR/scripts/network/tproxy.sh" start -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1; then
+    log "WARN" "TProxy rule setup reported errors, traffic may not be proxied (see $LOG_FILE)"
+  fi
 
   log "INFO" "========== Xray Service Started =========="
 }
@@ -111,7 +111,8 @@ do_stop() {
 
   # Clean up the TProxy rules first (avoids losing connectivity)
   log "INFO" "Cleaning up TProxy rules..."
-  "$MODDIR/scripts/network/tproxy.sh" stop -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1
+  "$MODDIR/scripts/network/tproxy.sh" stop -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1 \
+    || log "WARN" "TProxy rule cleanup reported errors"
 
   # Terminate the Xray process
   local pid
@@ -189,7 +190,7 @@ Usage: $(basename "$0") {start|stop|restart|status}
 Commands:
   start     Start the Xray service
   stop      Stop the Xray service
-  restart   Restarting Xray Service
+  restart   Restart the Xray service
   status    Show service status
 
 Examples:

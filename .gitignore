@@ -1,6 +1,16 @@
-# The Xray core is downloaded by the GitHub workflow at build time
+# Xray core is downloaded by the GitHub workflow at build time
 bin/xray
 bin/xray.bak
 bin/.tmp/
+
+# Runtime files
+logs/
+config/tproxy/runtime_tproxy.conf
+config/tproxy/ipv6_backup.conf
+config/tproxy/*.zone
+config/tproxy/tmp/
+config/.sub_status
+config/xray/outbounds/.tmp_*
+
 # Build output
 *.zip

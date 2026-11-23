@@ -9,7 +9,7 @@
 # - ado/rmo: add/remove outbounds
 #
 # Logic:
-# - Direct mode: replace the outbound with freedom + replace routing
+# - Direct mode: replace the outbound with freedom (proxy_freedom.json) + replace routing
 # - Global mode: replace routing (outbound unchanged)
 # - Rule mode: replace routing with routing/rule.json (outbound unchanged)
 # - Switching from direct: first restore the CURRENT_CONFIG outbound
@@ -20,31 +20,16 @@ readonly MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly XRAY_BIN="$MODDIR/bin/xray"
 readonly API_SERVER="127.0.0.1:8080"
 readonly MODULE_CONF="$MODDIR/config/module.conf"
-readonly DEFAULT_OUTBOUND="$MODDIR/config/xray/confdir/routing/internal/proxy_freedom.json"
+readonly FREEDOM_OUTBOUND="$MODDIR/config/xray/confdir/routing/internal/proxy_freedom.json"
 readonly ROUTING_DIR="$MODDIR/config/xray/confdir/routing"
 readonly ROUTING_JSON="$ROUTING_DIR/rule.json"
 readonly GLOBAL_ROUTING="$ROUTING_DIR/global.json"
 readonly DIRECT_ROUTING="$ROUTING_DIR/direct.json"
 readonly LOG_FILE="$MODDIR/logs/service.log"
 
-# Import the utility library
+# Import the utility libraries
 . "$MODDIR/scripts/utils/log.sh"
-
-#######################################
-# Get the current node config path
-#######################################
-get_current_config() {
-  grep '^CURRENT_CONFIG=' "$MODULE_CONF" 2> /dev/null | cut -d'=' -f2 | tr -d '"'
-}
-
-#######################################
-# Get the current outbound mode
-#######################################
-get_current_mode() {
-  local mode
-  mode=$(grep '^OUTBOUND_MODE=' "$MODULE_CONF" 2> /dev/null | cut -d'=' -f2)
-  echo "${mode:-rule}"
-}
+. "$MODDIR/scripts/utils/common.sh"
 
 #######################################
 # Replace routing rules (adrules replaces by default)
@@ -57,11 +42,11 @@ replace_routing_rules() {
       log "INFO" "Routing rules replaced successfully"
       return 0
     else
-      log "INFO" "Failed to replace routing rules"
+      log "ERROR" "Failed to replace routing rules"
       return 1
     fi
   else
-    log "INFO" "Rules file does not exist: $rules_file"
+    log "ERROR" "Rules file does not exist: $rules_file"
     return 1
   fi
 }
@@ -73,12 +58,12 @@ switch_to_freedom() {
   log "INFO" "Switching outbound to freedom..."
   # Remove the existing proxy outbound
   "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
-  # Add the freedom outbound (default.json)
-  if "$XRAY_BIN" api ado --server="$API_SERVER" "$DEFAULT_OUTBOUND" 2> /dev/null; then
+  # Add the freedom outbound (proxy_freedom.json)
+  if "$XRAY_BIN" api ado --server="$API_SERVER" "$FREEDOM_OUTBOUND" 2> /dev/null; then
     log "INFO" "Switched to freedom outbound"
     return 0
   else
-    log "INFO" "Failed to switch to freedom outbound"
+    log "ERROR" "Failed to switch to freedom outbound"
     return 1
   fi
 }
@@ -88,11 +73,11 @@ switch_to_freedom() {
 #######################################
 restore_proxy_outbound() {
   local current_config
-  current_config=$(get_current_config)
+  current_config=$(conf_get "$MODULE_CONF" "CURRENT_CONFIG")
 
   if [ -z "$current_config" ] || [ ! -f "$current_config" ]; then
-    log "INFO" "Unable to get the current node config, using the default config"
-    current_config="$DEFAULT_OUTBOUND"
+    log "WARN" "Unable to get the current node config, using the freedom outbound"
+    current_config="$FREEDOM_OUTBOUND"
   fi
 
   log "INFO" "Restoring node config: $current_config"
@@ -103,7 +88,7 @@ restore_proxy_outbound() {
     log "INFO" "Node outbound restored"
     return 0
   else
-    log "INFO" "Failed to restore node outbound"
+    log "ERROR" "Failed to restore node outbound"
     return 1
   fi
 }
@@ -113,11 +98,7 @@ restore_proxy_outbound() {
 #######################################
 update_mode_config() {
   local mode="$1"
-  if grep -q '^OUTBOUND_MODE=' "$MODULE_CONF"; then
-    sed -i "s/^OUTBOUND_MODE=.*/OUTBOUND_MODE=$mode/" "$MODULE_CONF"
-  else
-    echo "OUTBOUND_MODE=$mode" >> "$MODULE_CONF"
-  fi
+  conf_set "$MODULE_CONF" "OUTBOUND_MODE" "$mode"
   log "INFO" "Updated module.conf: OUTBOUND_MODE=$mode"
 }
 
@@ -134,7 +115,7 @@ main() {
   fi
 
   local current_mode
-  current_mode=$(get_current_mode)
+  current_mode=$(conf_get "$MODULE_CONF" "OUTBOUND_MODE" "rule")
 
   log "INFO" "========== Switching Outbound Mode =========="
   log "INFO" "Current mode: $current_mode -> target mode: $target_mode"
@@ -173,7 +154,7 @@ main() {
       replace_routing_rules "$DIRECT_ROUTING"
       ;;
     *)
-      log "INFO" "Unknown mode: $target_mode"
+      log "ERROR" "Unknown mode: $target_mode"
       echo "error: unknown mode"
       exit 1
       ;;

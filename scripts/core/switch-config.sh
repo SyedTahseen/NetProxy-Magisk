@@ -1,15 +1,18 @@
 #!/system/bin/sh
+# Hot-switch the active node outbound through the Xray API
+# Usage: switch-config.sh <config_file>
+
 set -e
 set -u
 
 readonly MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly LOG_FILE="$MODDIR/logs/service.log"
-readonly STATUS_FILE="$MODDIR/config/status.conf"
+readonly MODULE_CONF="$MODDIR/config/module.conf"
 readonly XRAY_BIN="$MODDIR/bin/xray"
 readonly API_SERVER="127.0.0.1:8080"
 
-# Import the utility library
 . "$MODDIR/scripts/utils/log.sh"
+. "$MODDIR/scripts/utils/common.sh"
 
 #######################################
 # Hot-switch config
@@ -19,10 +22,7 @@ readonly API_SERVER="127.0.0.1:8080"
 hot_switch() {
   local config_file="$1"
 
-  if [ ! -f "$config_file" ]; then
-    log "ERROR" "Config file does not exist: $config_file"
-    exit 1
-  fi
+  [ -f "$config_file" ] || die "Config file does not exist: $config_file"
 
   log "INFO" "========== Starting Config Hot Switch =========="
   log "INFO" "New config: $config_file"
@@ -36,14 +36,12 @@ hot_switch() {
   if "$XRAY_BIN" api ado --server="$API_SERVER" "$config_file"; then
     log "INFO" "New outbound added successfully"
   else
-    log "ERROR" "Failed to add the new outbound"
-    exit 1
+    die "Failed to add the new outbound"
   fi
 
   # 3. Update CURRENT_CONFIG in module.conf
-  sed -i "s|^CURRENT_CONFIG=.*|CURRENT_CONFIG=\"$config_file\"|" "$MODDIR/config/module.conf"
+  conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
 
-  log "INFO" "Config file updated"
   log "INFO" "========== Hot Switch Complete =========="
 }
 

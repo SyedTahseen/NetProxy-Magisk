@@ -40,6 +40,7 @@ remove_block_rules_from_chain() {
   fi
 
   local count=0
+  local line_num
 
   for line_num in $line_numbers; do
     if $cmd -t "$table" -D "$chain" "$line_num" 2> /dev/null; then
@@ -54,11 +55,25 @@ remove_block_rules_from_chain() {
 }
 
 #######################################
-# Detect the device type and run the matching cleanup
+# Remove the REJECT/DROP rules of the given chains, for IPv4 and IPv6
+# Arguments:
+#   $1 - space-separated chain names
+#######################################
+clean_chains() {
+  local chain
+  for chain in $1; do
+    [ "$has_iptables" -eq 1 ] && remove_block_rules_from_chain "iptables" "$chain"
+    [ "$has_ip6tables" -eq 1 ] && remove_block_rules_from_chain "ip6tables" "$chain"
+  done
+  return 0
+}
+
+#######################################
+# Detect the device type (by chain existence) and run the matching cleanup
 #######################################
 fix_by_device() {
-  local has_iptables=0
-  local has_ip6tables=0
+  has_iptables=0
+  has_ip6tables=0
 
   command -v iptables > /dev/null 2>&1 && has_iptables=1
   command -v ip6tables > /dev/null 2>&1 && has_ip6tables=1
@@ -68,40 +83,17 @@ fix_by_device() {
     return 1
   fi
 
-  # Detect system features (by chain existence)
-  local is_oneplus=0
-  local is_redmagic=0
-
-  if iptables -t filter -L zte_fw_gms >/dev/null 2>&1; then
-    is_redmagic=1
-  elif iptables -t filter -L fw_INPUT >/dev/null 2>&1; then
-    is_oneplus=1
-  fi
-
-  # Try everything by default (clean up if the chain exists, to avoid misdetection)
-  local oneplus_chains="fw_INPUT fw_OUTPUT"
-  local redmagic_chains="zte_fw_gms"
-
   log "INFO" "Starting detection and repair..."
 
-  # RedMagic part
-  if [ "$is_redmagic" -eq 1 ]; then
+  if iptables -t filter -L zte_fw_gms > /dev/null 2>&1; then
     log "INFO" "REDMAGIC OS / ZTE detected, cleaning up zte_fw_gms"
-    for chain in $redmagic_chains; do
-      [ "$has_iptables" -eq 1 ] && remove_block_rules_from_chain "iptables" "$chain"
-      [ "$has_ip6tables" -eq 1 ] && remove_block_rules_from_chain "ip6tables" "$chain"
-    done
-  fi
-
-  # OnePlus part
-  if [ "$is_oneplus" -eq 1 ]; then
+    clean_chains "zte_fw_gms"
+  elif iptables -t filter -L fw_INPUT > /dev/null 2>&1; then
     log "INFO" "OnePlus/ColorOS detected, cleaning up fw_INPUT/fw_OUTPUT"
-    for chain in $oneplus_chains; do
-      [ "$has_iptables" -eq 1 ] && remove_block_rules_from_chain "iptables" "$chain"
-      [ "$has_ip6tables" -eq 1 ] && remove_block_rules_from_chain "ip6tables" "$chain"
-    done
+    clean_chains "fw_INPUT fw_OUTPUT"
+  else
+    log "INFO" "No supported vendor firewall chain found, nothing to do"
   fi
-
 }
 
 #######################################

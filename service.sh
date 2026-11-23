@@ -46,15 +46,11 @@ wait_for_boot() {
 # Run the device-specific fix script
 #######################################
 check_device_specific() {
-  # If the OnePlus A16 fix is enabled, run it directly
   if [ "$ONEPLUS_A16_FIX" = "1" ]; then
     log "INFO" "OnePlus A16 fix enabled, running fix script"
-    sh "$MODDIR/scripts/utils/oneplus_a16_fix.sh"
+    sh "$MODDIR/scripts/utils/oneplus_a16_fix.sh" || log "WARN" "OnePlus A16 fix script failed"
   fi
 }
-
-# Ensure the log directory exists
-mkdir -p "$MODDIR/logs"
 
 #######################################
 # Record environment info
@@ -88,10 +84,11 @@ log_env_info() {
 
   # Module Info
   if [ -f "$MODDIR/module.prop" ]; then
-    local version=$(grep "^version=" "$MODDIR/module.prop" | cut -d= -f2)
-    local versionCode=$(grep "^versionCode=" "$MODDIR/module.prop" | cut -d= -f2)
+    local version version_code
+    version=$(grep "^version=" "$MODDIR/module.prop" | cut -d= -f2)
+    version_code=$(grep "^versionCode=" "$MODDIR/module.prop" | cut -d= -f2)
     log "INFO" "VERSION: ${version:-unknown}"
-    log "INFO" "VERSION_CODE: ${versionCode:-unknown}"
+    log "INFO" "VERSION_CODE: ${version_code:-unknown}"
   fi
 
   log "INFO" "=================================="
@@ -107,8 +104,12 @@ wait_for_boot
 # Check whether autostart on boot is enabled
 if [ "$AUTO_START" = "1" ]; then
   log "INFO" "Starting service..."
-  sh "$MODDIR/scripts/core/service.sh" start
-  log "INFO" "Service startup complete"
+  # A failed start must not skip the device fix below (this script runs with set -e)
+  if sh "$MODDIR/scripts/core/service.sh" start; then
+    log "INFO" "Service startup complete"
+  else
+    log "ERROR" "Service failed to start, see service.log"
+  fi
 else
   log "INFO" "Autostart on boot is disabled, skipping startup"
 fi
