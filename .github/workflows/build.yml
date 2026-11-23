@@ -1,0 +1,85 @@
+name: Build module
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+  # Uncomment to rebuild automatically every Monday so the zip always has the newest Xray:
+  # schedule:
+  #   - cron: "0 3 * * 1"
+
+permissions:
+  contents: write   # needed only to attach the zip to a release on tag pushes
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download the latest Xray (Android arm64)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG=$(gh api repos/XTLS/Xray-core/releases/latest --jq .tag_name)
+          echo "XRAY_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Latest Xray release: $TAG"
+
+          mkdir -p /tmp/xray
+          gh release download "$TAG" --repo XTLS/Xray-core \
+            --pattern 'Xray-android-arm64-v8a.zip' \
+            --pattern 'Xray-android-arm64-v8a.zip.dgst' \
+            --dir /tmp/xray
+
+          # Verify the SHA-256 published with the release (warn if it cannot be parsed)
+          expected=$(grep -iE '^SHA(2-)?256' /tmp/xray/Xray-android-arm64-v8a.zip.dgst | head -1 | sed 's/.*= *//' | tr -d '[:space:]' || true)
+          actual=$(sha256sum /tmp/xray/Xray-android-arm64-v8a.zip | cut -d' ' -f1)
+          if [ -z "$expected" ]; then
+            echo "::warning::Could not read the SHA-256 from the .dgst file, skipping checksum verification"
+          elif [ "${expected,,}" != "$actual" ]; then
+            echo "::error::Checksum mismatch (expected $expected, got $actual)"
+            exit 1
+          fi
+
+          unzip -oq /tmp/xray/Xray-android-arm64-v8a.zip xray -d /tmp/xray
+          install -m 755 /tmp/xray/xray bin/xray
+          file bin/xray | tee /dev/stderr | grep -q 'ARM aarch64'
+
+      - name: Stage the module files
+        run: |
+          set -euo pipefail
+          VERSION=$(grep '^version=' module.prop | cut -d= -f2)
+          CODE=$(grep '^versionCode=' module.prop | cut -d= -f2)
+          NAME="NetProxy_${VERSION}_${CODE}_xray-${XRAY_TAG}"
+          echo "ZIP_NAME=${NAME}.zip" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=${NAME}" >> "$GITHUB_ENV"
+          # Copy only the module files into dist/ (module.prop must end up at the zip root)
+          mkdir dist
+          tar --exclude=./.git --exclude=./.github --exclude=./.gitignore --exclude=./dist --exclude='*.zip' -cf - . | tar -xf - -C dist
+          ls -lh dist/bin
+          test -f dist/module.prop && test -f dist/customize.sh && test -x dist/bin/xray
+          echo "### Built \`${NAME}\` with Xray \`$XRAY_TAG\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # GitHub always zips an artifact. Uploading the *contents* of dist/ means the
+      # artifact you download IS the flashable module zip (no zip inside a zip).
+      - name: Upload artifact (download it and flash directly)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
+          if-no-files-found: error
+          compression-level: 6
+
+      - name: Zip for release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: cd dist && zip -q -r -X "../${ZIP_NAME}" .
+
+      - name: Attach to GitHub release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
