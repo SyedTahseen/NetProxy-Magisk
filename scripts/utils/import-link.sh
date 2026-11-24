@@ -33,7 +33,7 @@ tmp_dir="$OUTBOUNDS_DIR/.tmp_import_$$"
 rm -rf "$tmp_dir"
 mkdir -p "$tmp_dir"
 
-if ! (cd "$tmp_dir" && "$MODDIR/bin/proxylink" -parse "$link" -insecure -format xray -auto); then
+if ! (cd "$tmp_dir" && "$MODDIR/bin/proxylink" -parse "$link" -format xray -auto); then
   rm -rf "$tmp_dir"
   exit 1
 fi

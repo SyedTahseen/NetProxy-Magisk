@@ -15,6 +15,7 @@ readonly DEFAULT_PERFORMANCE_MODE=0
 
 readonly DEFAULT_DNS_HIJACK_ENABLE=1
 readonly DEFAULT_DNS_PORT="1053"
+readonly DEFAULT_API_PORT="8080"
 
 readonly DEFAULT_MOBILE_INTERFACE="rmnet_data+"
 readonly DEFAULT_WIFI_INTERFACE="wlan0"
@@ -33,7 +34,7 @@ readonly DEFAULT_PROXY_UDP=1
 
 readonly DEFAULT_PROXY_IPV6=0
 
-readonly DEFAULT_BYPASS_IPv4_LIST="0.0.0.0/8 10.0.0.0/8 100.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24 192.88.99.0/24 192.168.0.0/16 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4 255.255.255.255/32"
+readonly DEFAULT_BYPASS_IPv4_LIST="0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.0.0.0/24 192.0.2.0/24 192.88.99.0/24 192.168.0.0/16 198.51.100.0/24 203.0.113.0/24 224.0.0.0/4 240.0.0.0/4 255.255.255.255/32"
 readonly DEFAULT_BYPASS_IPv6_LIST="::/128 ::1/128 ::ffff:0:0/96 100::/64 64:ff9b::/96 2001::/32 2001:10::/28 2001:20::/28 2001:db8::/32 2002::/16 fe80::/10 ff00::/8"
 readonly DEFAULT_PROXY_IPv4_LIST=""
 readonly DEFAULT_PROXY_IPv6_LIST=""
@@ -141,6 +142,7 @@ load_config() {
   PERFORMANCE_MODE="${PERFORMANCE_MODE:-$DEFAULT_PERFORMANCE_MODE}"
   DNS_HIJACK_ENABLE="${DNS_HIJACK_ENABLE:-$DEFAULT_DNS_HIJACK_ENABLE}"
   DNS_PORT="${DNS_PORT:-$DEFAULT_DNS_PORT}"
+  API_PORT="${API_PORT:-$DEFAULT_API_PORT}"
   MOBILE_INTERFACE="${MOBILE_INTERFACE:-$DEFAULT_MOBILE_INTERFACE}"
   WIFI_INTERFACE="${WIFI_INTERFACE:-$DEFAULT_WIFI_INTERFACE}"
   HOTSPOT_INTERFACE="${HOTSPOT_INTERFACE:-$DEFAULT_HOTSPOT_INTERFACE}"
@@ -321,6 +323,7 @@ validate_config() {
   esac
 
   check_int_range DNS_PORT "$DNS_PORT" 1 65535 || return 1
+  check_int_range API_PORT "$API_PORT" 1 65535 || return 1
   check_int_range MARK_VALUE "$MARK_VALUE" 1 2147483647 || return 1
   check_int_range MARK_VALUE6 "$MARK_VALUE6" 1 2147483647 || return 1
   check_int_range TABLE_ID "$TABLE_ID" 1 65535 || return 1
@@ -448,9 +451,29 @@ check_kernel_feature() {
       return 1
     fi
   else
-    log Warn "Kernel config cache not available, cannot check $feature"
-    return 1
+    # No /proc/config.gz on this kernel: TPROXY is probed for real, every other
+    # feature is assumed present (a missing one shows up as an iptables error).
+    if [ "$feature" = "NETFILTER_XT_TARGET_TPROXY" ]; then
+      probe_tproxy
+      return $?
+    fi
+    log Debug "Kernel config unavailable, assuming $feature is supported"
+    return 0
   fi
+}
+
+probe_tproxy() {
+  local chain="NP_PROBE_TPROXY" rc=1
+  command iptables -w 100 -t mangle -N "$chain" > /dev/null 2>&1 || command iptables -w 100 -t mangle -F "$chain" > /dev/null 2>&1
+  if command iptables -w 100 -t mangle -A "$chain" -p tcp -j TPROXY --on-port 1 --tproxy-mark 1 > /dev/null 2>&1; then
+    rc=0
+    log Info "TPROXY probe succeeded (no /proc/config.gz)"
+  else
+    log Warn "TPROXY probe failed (no /proc/config.gz)"
+  fi
+  command iptables -w 100 -t mangle -F "$chain" > /dev/null 2>&1
+  command iptables -w 100 -t mangle -X "$chain" > /dev/null 2>&1
+  return $rc
 }
 
 check_tproxy_support() {
@@ -1050,10 +1073,10 @@ setup_proxy_chain() {
       log Info "TPROXY mode rules added"
     else
       $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -m conntrack --ctstate NEW,RELATED -j CONNMARK --set-mark "$mark"
-      $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -m connmark --mark "$mark" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
+      $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -p tcp -m connmark --mark "$mark" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
 
       $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -m conntrack --ctstate NEW,RELATED -j CONNMARK --set-mark "$mark"
-      $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -m connmark --mark "$mark" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
+      $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -p tcp -m connmark --mark "$mark" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
       log Info "REDIRECT mode rules added"
     fi
   else
@@ -1063,8 +1086,8 @@ setup_proxy_chain() {
       $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j MARK --set-mark "$mark"
       log Info "TPROXY mode rules added"
     else
-      $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
-      $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -j REDIRECT --to-ports "$PROXY_TCP_PORT"
+      $cmd -t "$table" -A "PROXY_PREROUTING$suffix" -p tcp -j REDIRECT --to-ports "$PROXY_TCP_PORT"
+      $cmd -t "$table" -A "PROXY_OUTPUT$suffix" -p tcp -j REDIRECT --to-ports "$PROXY_TCP_PORT"
       log Info "REDIRECT mode rules added"
     fi
   fi
@@ -1280,8 +1303,7 @@ cleanup_routing4() {
   ip_rule del fwmark "$MARK_VALUE" table "$TABLE_ID" pref "$TABLE_ID"
   ip_route del local 0.0.0.0/0 dev lo table "$TABLE_ID"
 
-  log Debug "[EXEC] echo 0 > /proc/sys/net/ipv4/ip_forward"
-  [ "$DRY_RUN" -eq 0 ] && echo 0 > /proc/sys/net/ipv4/ip_forward
+  log Debug "ip_forward left untouched (Android manages it for tethering)"
 
   log Info "IPv4 routing cleanup completed"
 }
@@ -1292,8 +1314,7 @@ cleanup_routing6() {
   ip6_rule del fwmark "$MARK_VALUE6" table "$TABLE_ID" pref "$TABLE_ID"
   ip6_route del local ::/0 dev lo table "$TABLE_ID"
 
-  log Debug "[EXEC] echo 0 > /proc/sys/net/ipv6/conf/all/forwarding"
-  [ "$DRY_RUN" -eq 0 ] && echo 0 > /proc/sys/net/ipv6/conf/all/forwarding
+  log Debug "IPv6 forwarding left untouched (Android manages it for tethering)"
 
   log Info "IPv6 routing cleanup completed"
 }
@@ -1341,6 +1362,7 @@ detect_proxy_mode() {
 
 start_proxy() {
   log Info "Starting proxy setup..."
+  protect_api enable
   if [ "$BYPASS_CN_IP" -eq 1 ]; then
     if ! check_kernel_feature "IP_SET" || ! check_kernel_feature "NETFILTER_XT_SET"; then
       log Error "Kernel does not support ipset (CONFIG_IP_SET, CONFIG_NETFILTER_XT_SET). Cannot bypass CN IPs"
@@ -1400,6 +1422,7 @@ stop_proxy() {
   fi
   cleanup_ipset
   log Info "Proxy stopped"
+  protect_api disable
   block_loopback_traffic disable
   block_quic disable
   if [ "$PROXY_IPV6" -eq -1 ]; then
@@ -1411,12 +1434,27 @@ stop_proxy() {
 block_loopback_traffic() {
   case "$1" in
     enable)
+      block_loopback_traffic disable
       ip6tables -t filter -A OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
       iptables -t filter -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
       ;;
     disable)
       ip6tables -t filter -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT 2> /dev/null || true
       iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT 2> /dev/null || true
+      ;;
+  esac
+}
+
+protect_api() {
+  # The Xray gRPC API on 127.0.0.1 has no authentication: only root may reach it.
+  case "$1" in
+    enable)
+      iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp --dport "$API_PORT" -m owner ! --uid-owner 0 -j REJECT 2> /dev/null || true
+      iptables -t filter -I OUTPUT -d 127.0.0.1 -p tcp --dport "$API_PORT" -m owner ! --uid-owner 0 -j REJECT \
+        || log Warn "Failed to protect Xray API port $API_PORT"
+      ;;
+    disable)
+      iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp --dport "$API_PORT" -m owner ! --uid-owner 0 -j REJECT 2> /dev/null || true
       ;;
   esac
 }
@@ -1580,7 +1618,7 @@ show_usage() {
   script_name=$(basename "$0")
 
   cat << EOF
-Usage: $script_name {start|stop|restart} [options]
+Usage: $script_name {start|stop|restart|detect} [options]
 
 This script sets up / cleans up transparent proxy (TPROXY or REDIRECT) rules
 for TCP/UDP traffic redirection, DNS hijacking, per-app proxy, CN IP bypass, etc.
@@ -1655,7 +1693,7 @@ parse_args() {
   VERBOSE=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      start | stop | restart)
+      start | stop | restart | detect)
         if [ -n "$MAIN_CMD" ]; then
           log Error "Multiple commands specified."
           exit 1
@@ -1756,6 +1794,9 @@ main() {
       call_func pre_start_hook
       start_proxy
       log Info "Proxy restarted"
+      ;;
+    detect)
+      if [ "$USE_TPROXY" -eq 1 ]; then echo tproxy; else echo redirect; fi
       ;;
     *)
       log Error "Invalid command: $MAIN_CMD"

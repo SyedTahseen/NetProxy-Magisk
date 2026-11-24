@@ -205,7 +205,19 @@ set_permissions() {
     fi
   done
 
-  set_perm_recursive "$MODPATH" 0 0 0755 0755
+  # Everything except webroot/ (the root manager sets webroot permissions and
+  # SELinux context itself): directories 0755, files 0644, then executables below.
+  local entry
+  set_perm "$MODPATH" 0 0 0755
+  for entry in "$MODPATH"/* "$MODPATH"/.[!.]*; do
+    [ -e "$entry" ] || continue
+    [ "$entry" = "$MODPATH/webroot" ] && continue
+    set_perm_recursive "$entry" 0 0 0755 0644
+  done
+
+  for file in $EXECUTABLE_FILES service.sh; do
+    [ -e "$MODPATH/$file" ] && chmod 0755 "$MODPATH/$file" 2> /dev/null
+  done
 
   print_ok "Permissions set"
   return 0

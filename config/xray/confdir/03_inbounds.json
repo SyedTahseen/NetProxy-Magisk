@@ -3,11 +3,11 @@
         {
             "tag": "tproxy-in",
             "port": 12345,
-            "protocol": "dokodemo-door",
+            "protocol": "tunnel",
             "settings": {
-                "network": "tcp,udp",
+                "allowedNetwork": "tcp,udp",
                 "followRedirect": true,
-                "level": 0
+                "userLevel": 0
             },
             "sniffing": {
                 "enabled": true,
@@ -21,6 +21,17 @@
                 "sockopt": {
                     "tproxy": "tproxy"
                 }
+            }
+        },
+        {
+            "tag": "dns-in",
+            "port": 1053,
+            "protocol": "tunnel",
+            "settings": {
+                "rewriteAddress": "1.1.1.1",
+                "rewritePort": 53,
+                "allowedNetwork": "tcp,udp",
+                "userLevel": 0
             }
         }
     ]

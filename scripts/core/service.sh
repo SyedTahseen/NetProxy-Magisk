@@ -67,8 +67,24 @@ do_start() {
   log "INFO" "Routing config: $routing_config"
   log "INFO" "Outbound config: $outbound_config"
 
+  local run_confdir="$CONFDIR"
+  local proxy_mode_used
+  proxy_mode_used=$("$MODDIR/scripts/network/tproxy.sh" detect -d "$MODDIR/config/tproxy" 2> /dev/null | tail -n 1)
+  if [ "$proxy_mode_used" = "redirect" ]; then
+    # Kernel has no TPROXY: the inbound must use Redirect mode (TCP only)
+    log "WARN" "Kernel lacks TPROXY, using REDIRECT mode (TCP only)"
+    run_confdir="$MODDIR/config/xray/.runtime_confdir"
+    rm -rf "$run_confdir"
+    mkdir -p "$run_confdir"
+    local f
+    for f in "$CONFDIR"/*.json; do
+      [ -f "$f" ] || continue
+      sed 's/"tproxy"[[:space:]]*:[[:space:]]*"tproxy"/"tproxy": "redirect"/' "$f" > "$run_confdir/$(basename "$f")"
+    done
+  fi
+
   nohup "$BUSYBOX" setuidgid root:net_admin "$XRAY_BIN" run \
-    -confdir "$CONFDIR" \
+    -confdir "$run_confdir" \
     -config "$routing_config" \
     -config "$outbound_config" \
     > "$XRAY_LOG_FILE" 2>&1 &

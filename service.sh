@@ -9,7 +9,7 @@ readonly LOG_FILE="$MODDIR/logs/service.log"
 
 load_module_config() {
   AUTO_START=1
-  ONEPLUS_A16_FIX=1
+  ONEPLUS_A16_FIX=0
 
   if [ -f "$MODULE_CONF" ]; then
     . "$MODULE_CONF"

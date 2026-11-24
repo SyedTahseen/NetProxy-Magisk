@@ -1,7 +1,8 @@
 id=netproxy
 name=NetProxy
-version=v6.0.2
-versionCode=504
+version=v6.0.3
+versionCode=505
 author=Fanju
 description=Proxy tool based on the Xray core
-actionIcon=/data/adb/modules/netproxy/webroot/logo.png
+actionIcon=webroot/logo.png
+webuiIcon=webroot/logo.png

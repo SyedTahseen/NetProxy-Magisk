@@ -8,7 +8,7 @@ readonly TEMP_DIR="$BIN_DIR/.tmp"
 readonly LOG_FILE="$MODDIR/logs/service.log"
 readonly REPO="XTLS/Xray-core"
 readonly ARCH="android-arm64-v8a"
-readonly MIRROR="https://ghfast.top/?q="
+readonly MIRROR="https://ghfast.top/"
 
 . "$MODDIR/scripts/utils/log.sh"
 
@@ -27,7 +27,7 @@ mkdir -p "$TEMP_DIR"
 log "INFO" "========== Starting Xray Update =========="
 
 log "INFO" "Fetching the latest version..."
-VERSION=$(curl -s "https://api.github.com/repos/$REPO/releases/latest" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
+VERSION=$(curl -fsS --connect-timeout 15 "https://api.github.com/repos/$REPO/releases/latest" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -n 1 | sed 's/.*"\([^"]*\)"$/\1/')
 
 [ -n "$VERSION" ] || die "Unable to get version info"
 
@@ -51,19 +51,37 @@ else
 fi
 
 FILENAME="Xray-${ARCH}.zip"
-GITHUB_URL="https://github.com/$REPO/releases/download/$VERSION/$FILENAME"
-ENCODED_URL=$(echo "$GITHUB_URL" | sed 's/:/%3A/g; s/\//%2F/g')
-DOWNLOAD_URL="${MIRROR}${ENCODED_URL}"
+GITHUB_BASE="https://github.com/$REPO/releases/download/$VERSION"
+ZIP_FILE="$TEMP_DIR/$FILENAME"
+DGST_FILE="$TEMP_DIR/$FILENAME.dgst"
+
+fetch() {
+  curl -fL --connect-timeout 15 --retry 2 -o "$2" "$1"
+}
+
+# The checksum file is always taken from GitHub directly (never from a mirror),
+# so a malicious mirror cannot supply both a tampered binary and a matching hash.
+log "INFO" "Fetching checksum from GitHub..."
+fetch "$GITHUB_BASE/$FILENAME.dgst" "$DGST_FILE" || die "Could not fetch the checksum file from GitHub, refusing to install an unverified binary"
+
+EXPECTED=$(grep -iE '^SHA(2-)?256' "$DGST_FILE" | head -n 1 | sed 's/.*= *//' | tr -d '[:space:]' | tr 'A-F' 'a-f')
+[ -n "$EXPECTED" ] || die "Could not read SHA-256 from the checksum file"
 
 log "INFO" "Starting download..."
-ZIP_FILE="$TEMP_DIR/$FILENAME"
+if ! fetch "$GITHUB_BASE/$FILENAME" "$ZIP_FILE"; then
+  log "WARN" "Direct download failed, trying mirror (checksum is still enforced)"
+  fetch "${MIRROR}${GITHUB_BASE}/${FILENAME}" "$ZIP_FILE" || die "Download failed"
+fi
 
-curl -L -o "$ZIP_FILE" "$DOWNLOAD_URL" || die "Download failed"
-
-FILE_SIZE=$(stat -c%s "$ZIP_FILE" 2> /dev/null || stat -f%z "$ZIP_FILE" 2> /dev/null || echo "0")
+FILE_SIZE=$(stat -c%s "$ZIP_FILE" 2> /dev/null || echo "0")
 [ "$FILE_SIZE" -ge 1000000 ] || die "Abnormal file size: $FILE_SIZE bytes"
 
-log "INFO" "Download complete, size: $(echo "$FILE_SIZE" | awk '{printf "%.1f MB", $1/1024/1024}')"
+ACTUAL=$(sha256sum "$ZIP_FILE" | cut -d' ' -f1)
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  rm -f "$ZIP_FILE"
+  die "Checksum mismatch (expected $EXPECTED, got $ACTUAL), update aborted"
+fi
+log "INFO" "Checksum verified, size: $(echo "$FILE_SIZE" | awk '{printf "%.1f MB", $1/1024/1024}')"
 
 log "INFO" "Extracting files..."
 unzip -oq "$ZIP_FILE" -d "$TEMP_DIR" || die "Extraction failed"
