@@ -28,7 +28,6 @@ readonly EXECUTABLE_FILES="
     scripts/core/switch-mode.sh
     scripts/network/tproxy.sh
     scripts/config/subscription.sh
-    scripts/utils/update-xray.sh
     scripts/utils/socks-fix.sh
     scripts/utils/import-link.sh
     scripts/utils/import-wireguard.sh
@@ -227,14 +226,58 @@ cleanup() {
   rm -rf "$BACKUP_DIR" 2> /dev/null
 }
 
+check_arch() {
+  local abi="${ARCH:-}"
+  [ -n "$abi" ] || abi="$(getprop ro.product.cpu.abi 2> /dev/null)"
+  case "$abi" in
+    arm64*) return 0 ;;
+    *) abort "Unsupported architecture '$abi': NetProxy ships arm64 binaries only" ;;
+  esac
+}
+
+# Preserved files hide newer shipped defaults, so keep the shipped copy as <file>.new
+SHIPPED_DIR="$TMPDIR/netproxy_shipped"
+readonly NEW_DEFAULT_FILES="
+    xray/confdir/02_dns.json
+    xray/confdir/routing/rule.json
+    xray/confdir/routing/global.json
+    xray/confdir/routing/direct.json
+    xray/confdir/routing/routing_rules.json
+"
+
+snapshot_shipped() {
+  local f
+  for f in $NEW_DEFAULT_FILES; do
+    if [ -f "$MODPATH/config/$f" ]; then
+      mkdir -p "$(dirname "$SHIPPED_DIR/$f")"
+      cp "$MODPATH/config/$f" "$SHIPPED_DIR/$f" 2> /dev/null
+    fi
+  done
+  return 0
+}
+
+report_new_defaults() {
+  local f
+  for f in $NEW_DEFAULT_FILES; do
+    if [ -f "$SHIPPED_DIR/$f" ] && [ -f "$MODPATH/config/$f" ] && ! cmp -s "$SHIPPED_DIR/$f" "$MODPATH/config/$f"; then
+      cp "$SHIPPED_DIR/$f" "$MODPATH/config/$f.new" 2> /dev/null \
+        && print_warn "Kept your $f; the new default is saved as $f.new"
+    fi
+  done
+  return 0
+}
+
 unzip -o "$ZIPFILE" "module.prop" -d "$TMPDIR" > /dev/null 2>&1
 
 print_title "NetProxy - Xray Transparent Proxy"
+check_arch
 ui_print "  Version: $(grep_prop version "$TMPDIR/module.prop" 2> /dev/null || echo "unknown")"
 
 if backup_config \
   && extract_module \
+  && snapshot_shipped \
   && restore_config \
+  && report_new_defaults \
   && stop_xray_if_running \
   && sync_to_live \
   && set_permissions \

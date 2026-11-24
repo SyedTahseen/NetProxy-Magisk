@@ -1,6 +1,4 @@
 bin/xray
-bin/xray.bak
-bin/.tmp/
 
 logs/
 config/tproxy/runtime_tproxy.conf
