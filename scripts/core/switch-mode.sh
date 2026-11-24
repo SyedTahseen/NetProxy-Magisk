@@ -4,7 +4,6 @@ set -u
 
 readonly MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
 readonly XRAY_BIN="$MODDIR/bin/xray"
-readonly API_SERVER="127.0.0.1:8080"
 readonly MODULE_CONF="$MODDIR/config/module.conf"
 readonly FREEDOM_OUTBOUND="$MODDIR/config/xray/confdir/routing/internal/proxy_freedom.json"
 readonly ROUTING_DIR="$MODDIR/config/xray/confdir/routing"
@@ -16,11 +15,17 @@ readonly LOG_FILE="$MODDIR/logs/service.log"
 . "$MODDIR/scripts/utils/log.sh"
 . "$MODDIR/scripts/utils/common.sh"
 
+fail() {
+  log "ERROR" "Mode switch aborted: $1"
+  echo "error: $1"
+  exit 1
+}
+
 replace_routing_rules() {
   local rules_file="$1"
   if [ -f "$rules_file" ]; then
     log "INFO" "Replacing routing rules: $rules_file"
-    if "$XRAY_BIN" api adrules --server="$API_SERVER" "$rules_file" 2> /dev/null; then
+    if "$XRAY_BIN" api adrules --server="$XRAY_API_SERVER" "$rules_file" 2> /dev/null; then
       log "INFO" "Routing rules replaced successfully"
       return 0
     else
@@ -35,8 +40,8 @@ replace_routing_rules() {
 
 replace_proxy_outbound() {
   local outbound_file="$1"
-  "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
-  "$XRAY_BIN" api ado --server="$API_SERVER" "$outbound_file" 2> /dev/null
+  "$XRAY_BIN" api rmo --server="$XRAY_API_SERVER" "proxy" 2> /dev/null || true
+  "$XRAY_BIN" api ado --server="$XRAY_API_SERVER" "$outbound_file" 2> /dev/null
 }
 
 switch_to_freedom() {
@@ -77,12 +82,24 @@ update_mode_config() {
 
 main() {
   local target_mode="${1:-}"
+  local routing_file
 
   if [ -z "$target_mode" ]; then
     echo "Usage: $0 <mode>"
     echo "  mode: rule | global | direct"
     exit 1
   fi
+
+  case "$target_mode" in
+    rule) routing_file="$ROUTING_JSON" ;;
+    global) routing_file="$GLOBAL_ROUTING" ;;
+    direct) routing_file="$DIRECT_ROUTING" ;;
+    *)
+      log "ERROR" "Unknown mode: $target_mode"
+      echo "error: unknown mode"
+      exit 1
+      ;;
+  esac
 
   local current_mode
   current_mode=$(conf_get "$MODULE_CONF" "OUTBOUND_MODE" "rule")
@@ -92,33 +109,16 @@ main() {
 
   if [ "$current_mode" = "direct" ] && [ "$target_mode" != "direct" ]; then
     log "INFO" "Switching from direct mode, restoring node outbound..."
-    restore_proxy_outbound
+    restore_proxy_outbound || fail "failed to restore node outbound"
   fi
 
   if [ "$target_mode" = "direct" ] && [ "$current_mode" != "direct" ]; then
     log "INFO" "Switching to direct mode, replacing with freedom outbound..."
-    switch_to_freedom
+    switch_to_freedom || fail "failed to switch to freedom outbound"
   fi
 
-  case "$target_mode" in
-    rule)
-      log "INFO" "Rule mode: applying rule.json"
-      replace_routing_rules "$ROUTING_JSON"
-      ;;
-    global)
-      log "INFO" "Global mode: applying global.json"
-      replace_routing_rules "$GLOBAL_ROUTING"
-      ;;
-    direct)
-      log "INFO" "Direct mode: applying direct.json"
-      replace_routing_rules "$DIRECT_ROUTING"
-      ;;
-    *)
-      log "ERROR" "Unknown mode: $target_mode"
-      echo "error: unknown mode"
-      exit 1
-      ;;
-  esac
+  log "INFO" "Applying routing rules for $target_mode mode: $(basename "$routing_file")"
+  replace_routing_rules "$routing_file" || fail "failed to apply routing rules"
 
   update_mode_config "$target_mode"
 

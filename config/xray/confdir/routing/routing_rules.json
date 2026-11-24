@@ -117,11 +117,11 @@
         "name": "Bypass domestic (China) DNS domains",
         "type": "field",
         "domain": [
-            "alidns.com",
-            "doh.pub",
-            "dot.pub",
-            "360.cn",
-            "onedns.net"
+            "domain:alidns.com",
+            "domain:doh.pub",
+            "domain:dot.pub",
+            "domain:360.cn",
+            "domain:onedns.net"
         ],
         "outboundTag": "direct",
         "enabled": true,

@@ -114,7 +114,6 @@ cmd_update_all() {
 
     name=$(json_field "$meta_file" "name")
     echo "Updating subscription: $name"
-    # Subshell: cmd_update exits on failure and must not abort the whole loop
     if (cmd_update "$name"); then
       ok=$((ok + 1))
     else
@@ -168,7 +167,6 @@ update_subscription() {
   local tmp_dir="$OUTBOUNDS_DIR/.tmp_${sub_dir##*/}"
 
   log "INFO" "========== Starting Subscription Update =========="
-  log "DEBUG" "URL: $url"
   log "DEBUG" "Target directory: $sub_dir"
 
   rm -rf "$tmp_dir"

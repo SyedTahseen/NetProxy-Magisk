@@ -1,5 +1,7 @@
 #!/system/bin/sh
 
+XRAY_API_SERVER="127.0.0.1:8080"
+
 json_field() {
   grep -o "\"$2\": *\"[^\"]*\"" "$1" 2> /dev/null \
     | head -n 1 \
@@ -20,4 +22,13 @@ conf_set() {
   else
     echo "$key=$value" >> "$file"
   fi
+}
+
+unique_json_path() {
+  local target="$1/$2.json" n=2
+  while [ -e "$target" ]; do
+    target="$1/$2 $n.json"
+    n=$((n + 1))
+  done
+  echo "$target"
 }

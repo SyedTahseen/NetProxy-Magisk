@@ -1,17 +1,10 @@
 #!/system/bin/sh
-# Convert a WireGuard (wg-quick) config into an Xray "wireguard" outbound.
-#
-# Usage:
-#   import-wireguard.sh <file.conf> [name]     read config from a file
-#   import-wireguard.sh - [name]               read config from stdin
-#   import-wireguard.sh --text '<conf text>' [name]
-#
-# The result is written to the default outbound group as <name>.json and can
-# be selected like any other node (cli config switch <name>).
 
 MODDIR="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTBOUNDS_DIR="$MODDIR/config/xray/outbounds"
 DEFAULT_GROUP_DIR="$OUTBOUNDS_DIR/default"
+
+. "$MODDIR/scripts/utils/common.sh"
 
 die() {
   echo "Error: $1" >&2
@@ -32,7 +25,6 @@ urldecode() {
     -e 's/%5[Bb]/[/g' -e 's/%5[Dd]/]/g' -e 's/%25/%/g'
 }
 
-# wireguard://<privateKey>@host:port?publickey=..&address=..&mtu=..#name
 uri_to_conf() {
   local uri="$1" rest frag="" query="" base userinfo hostport
   rest="${uri#*://}"
@@ -118,19 +110,15 @@ case "$src" in
     ;;
 esac
 
-# --- helpers -----------------------------------------------------------------
-
 trim() {
   printf '%s' "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
-# Turn "a, b ,c" into "a","b","c" (JSON string list body)
 json_list() {
   printf '%s' "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
     | grep -v '^$' | sed 's/.*/"&"/' | paste -sd, -
 }
 
-# Turn "1, 2, 3" into "1,2,3" (validated numeric list)
 num_list() {
   printf '%s' "$1" | tr -d ' ' | tr -d '\r'
 }
@@ -149,8 +137,6 @@ safe_text() {
   return 0
 }
 
-# --- parse -------------------------------------------------------------------
-
 section=""
 secret_key=""
 address=""
@@ -159,7 +145,6 @@ reserved=""
 peer_count=0
 peers_json=""
 
-# current peer fields
 p_pub=""
 p_psk=""
 p_endpoint=""
@@ -206,7 +191,6 @@ while IFS= read -r raw || [ -n "$raw" ]; do
   line=$(printf '%s' "$raw" | tr -d '\r')
   line=$(trim "$line")
 
-  # "# Reserved = 1,2,3" (used by Cloudflare WARP exports) is meaningful
   case "$line" in
     \#*[Rr]eserved*=*)
       reserved=$(num_list "${line#*=}")
@@ -215,7 +199,6 @@ while IFS= read -r raw || [ -n "$raw" ]; do
     \#* | \;* | '') continue ;;
   esac
 
-  # strip trailing inline comments
   line=$(printf '%s' "$line" | sed 's/[[:space:]]#.*$//')
 
   case "$line" in
@@ -255,8 +238,6 @@ while IFS= read -r raw || [ -n "$raw" ]; do
 done < "$tmp_in"
 flush_peer
 
-# --- validate ----------------------------------------------------------------
-
 [ -n "$secret_key" ] || die "no PrivateKey found in [Interface]"
 valid_key "$secret_key" || die "PrivateKey is not a valid WireGuard key"
 [ -n "$address" ] || die "no Address found in [Interface]"
@@ -265,8 +246,6 @@ valid_key "$secret_key" || die "PrivateKey is not a valid WireGuard key"
 case "$address" in
   *'"'* | *'\'*) die "invalid Address" ;;
 esac
-
-# --- build -------------------------------------------------------------------
 
 settings="\"secretKey\":\"$secret_key\",\"address\":[$(json_list "$address")],\"peers\":[$peers_json]"
 
@@ -282,8 +261,6 @@ if [ -n "$reserved" ]; then
   settings="$settings,\"reserved\":[$reserved]"
 fi
 
-# --- name & write ------------------------------------------------------------
-
 if [ -z "$name" ]; then
   host="${first_endpoint%:*}"
   host=$(printf '%s' "$host" | tr -d '[]')
@@ -292,12 +269,7 @@ fi
 name=$(printf '%s' "$name" | sed 's/[\/\\:*?"<>|]/_/g')
 
 mkdir -p "$DEFAULT_GROUP_DIR"
-target="$DEFAULT_GROUP_DIR/$name.json"
-n=2
-while [ -e "$target" ]; do
-  target="$DEFAULT_GROUP_DIR/${name} $n.json"
-  n=$((n + 1))
-done
+target=$(unique_json_path "$DEFAULT_GROUP_DIR" "$name")
 
 cat > "$target" << EOF
 {

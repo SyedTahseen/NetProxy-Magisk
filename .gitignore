@@ -10,3 +10,5 @@ config/tproxy/tmp/
 config/xray/outbounds/.tmp_*
 
 *.zip
+
+config/.sub_status

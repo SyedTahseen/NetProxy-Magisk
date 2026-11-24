@@ -59,9 +59,9 @@ do_start() {
     *) routing_config="$CONFDIR/routing/rule.json" ;;
   esac
 
+  [ -d "$CONFDIR" ] || die "confdir directory does not exist: $CONFDIR"
   [ -f "$routing_config" ] || die "Routing config file does not exist: $routing_config"
   [ -f "$outbound_config" ] || die "Outbound config file does not exist: $outbound_config"
-  [ -d "$CONFDIR" ] || die "confdir directory does not exist: $CONFDIR"
 
   log "INFO" "Config directory: $CONFDIR"
   log "INFO" "Routing config: $routing_config"

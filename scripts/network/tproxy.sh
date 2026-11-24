@@ -66,6 +66,8 @@ readonly DEFAULT_BLOCK_QUIC=0
 
 readonly DEFAULT_DRY_RUN=0
 
+readonly PROXY_CHAIN_BASES="PROXY_PREROUTING PROXY_OUTPUT DIVERT PROXY_IP BYPASS_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN MAC_CHAIN"
+
 log() {
   local level="$1"
   local message="$2"
@@ -249,6 +251,7 @@ load_runtime_config() {
 }
 
 init_tmpdir() {
+  local d
   for d in /tmp /data/local/tmp "$CONFIG_DIR/tmp"; do
     if [ -d "$d" ] && [ -w "$d" ]; then
       export TMPDIR="$d"
@@ -281,55 +284,46 @@ init_kernel_config_cache() {
   fi
 }
 
-is_positive_integer() {
+is_uint() {
   case "$1" in
-    ''|*[!0-9]*) return 1 ;;
+    '' | *[!0-9]*) return 1 ;;
   esac
   return 0
+}
+
+check_int_range() {
+  if ! is_uint "$2" || [ "$2" -lt "$3" ] || [ "$2" -gt "$4" ]; then
+    log Error "Invalid $1: $2"
+    return 1
+  fi
 }
 
 validate_config() {
   log Debug "Validating configuration..."
 
-  if ! is_positive_integer "$PROXY_TCP_PORT" || [ "$PROXY_TCP_PORT" -lt 1 ] || [ "$PROXY_TCP_PORT" -gt 65535 ]; then
-    log Error "Invalid PROXY_TCP_PORT: $PROXY_TCP_PORT"
-    return 1
-  fi
-
-  if ! is_positive_integer "$PROXY_UDP_PORT" || [ "$PROXY_UDP_PORT" -lt 1 ] || [ "$PROXY_UDP_PORT" -gt 65535 ]; then
-    log Error "Invalid PROXY_UDP_PORT: $PROXY_UDP_PORT"
-    return 1
-  fi
+  check_int_range PROXY_TCP_PORT "$PROXY_TCP_PORT" 1 65535 || return 1
+  check_int_range PROXY_UDP_PORT "$PROXY_UDP_PORT" 1 65535 || return 1
 
   case "$PROXY_MODE" in
-    0|1|2) ;;
-    *) log Error "Invalid PROXY_MODE: $PROXY_MODE (must be 0=auto, 1=force TPROXY, 2=force REDIRECT)"; return 1 ;;
+    0 | 1 | 2) ;;
+    *)
+      log Error "Invalid PROXY_MODE: $PROXY_MODE (must be 0=auto, 1=force TPROXY, 2=force REDIRECT)"
+      return 1
+      ;;
   esac
 
   case "$DNS_HIJACK_ENABLE" in
-    0|1|2) ;;
-    *) log Error "Invalid DNS_HIJACK_ENABLE: $DNS_HIJACK_ENABLE (must be 0=disabled, 1=tproxy, 2=redirect)"; return 1 ;;
+    0 | 1 | 2) ;;
+    *)
+      log Error "Invalid DNS_HIJACK_ENABLE: $DNS_HIJACK_ENABLE (must be 0=disabled, 1=tproxy, 2=redirect)"
+      return 1
+      ;;
   esac
 
-  if ! is_positive_integer "$DNS_PORT" || [ "$DNS_PORT" -lt 1 ] || [ "$DNS_PORT" -gt 65535 ]; then
-    log Error "Invalid DNS_PORT: $DNS_PORT"
-    return 1
-  fi
-
-  if ! is_positive_integer "$MARK_VALUE" || [ "$MARK_VALUE" -lt 1 ] || [ "$MARK_VALUE" -gt 2147483647 ]; then
-    log Error "Invalid MARK_VALUE: $MARK_VALUE"
-    return 1
-  fi
-
-  if ! is_positive_integer "$MARK_VALUE6" || [ "$MARK_VALUE6" -lt 1 ] || [ "$MARK_VALUE6" -gt 2147483647 ]; then
-    log Error "Invalid MARK_VALUE6: $MARK_VALUE6"
-    return 1
-  fi
-
-  if ! is_positive_integer "$TABLE_ID" || [ "$TABLE_ID" -lt 1 ] || [ "$TABLE_ID" -gt 65535 ]; then
-    log Error "Invalid TABLE_ID: $TABLE_ID"
-    return 1
-  fi
+  check_int_range DNS_PORT "$DNS_PORT" 1 65535 || return 1
+  check_int_range MARK_VALUE "$MARK_VALUE" 1 2147483647 || return 1
+  check_int_range MARK_VALUE6 "$MARK_VALUE6" 1 2147483647 || return 1
+  check_int_range TABLE_ID "$TABLE_ID" 1 65535 || return 1
 
   case "$CORE_USER_GROUP" in
     *:*)
@@ -377,8 +371,6 @@ check_root() {
 }
 
 check_dependencies() {
-  # Make the bundled binaries (ipset) available even when this script is not
-  # started through service.sh, e.g. `cli proxy reload`.
   export PATH="$SCRIPT_DIR/../../bin:$PATH"
 
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -417,7 +409,7 @@ setup_busybox() {
     /data/adb/magisk/busybox
   "
 
-  local found_bb=""
+  local found_bb="" bb
   for bb in $bb_paths; do
     if [ -f "$bb" ] && [ -x "$bb" ]; then
       found_bb="$bb"
@@ -569,6 +561,17 @@ find_packages_uid() {
     fi
   done
   echo "$out"
+}
+
+add_app_rules() {
+  local cmd="$1" table="$2" chain="$3" target="$4" label="$5" uids uid
+  shift 5
+
+  uids=$(find_packages_uid "$@")
+  for uid in $uids; do
+    $cmd -t "$table" -A "$chain" -m owner --uid-owner "$uid" -j "$target"
+    log Info "Added $label for UID $uid"
+  done
 }
 
 safe_chain_exists() {
@@ -774,16 +777,14 @@ setup_proxy_chain() {
 
   log Info "Setting up $mode_name chains for IPv${family}"
 
-  local chains=""
-  chains="PROXY_PREROUTING$suffix PROXY_OUTPUT$suffix DIVERT$suffix PROXY_IP$suffix BYPASS_IP$suffix BYPASS_INTERFACE$suffix PROXY_INTERFACE$suffix DNS_HIJACK_PRE$suffix DNS_HIJACK_OUT$suffix APP_CHAIN$suffix MAC_CHAIN$suffix"
-
   local table="mangle"
   if [ "$mode" = "redirect" ]; then
     table="nat"
   fi
 
-  for c in $chains; do
-    safe_chain_create "$family" "$table" "$c"
+  local base
+  for base in $PROXY_CHAIN_BASES; do
+    safe_chain_create "$family" "$table" "$base$suffix"
   done
 
   if [ "$PERFORMANCE_MODE" -eq 1 ] && check_kernel_feature "NETFILTER_XT_TARGET_MARK" && check_kernel_feature "NETFILTER_XT_MATCH_SOCKET"; then
@@ -1000,23 +1001,13 @@ setup_proxy_chain() {
     fi
   fi
 
-  local uids
-  local uid
   if [ "$APP_PROXY_ENABLE" -eq 1 ]; then
     if check_kernel_feature "NETFILTER_XT_MATCH_OWNER"; then
       log Info "Setting up application filter rules in $APP_PROXY_MODE mode"
       case "$APP_PROXY_MODE" in
         blacklist)
           if [ -n "$BYPASS_APPS_LIST" ]; then
-            uids=$(find_packages_uid $BYPASS_APPS_LIST)
-            if [ $? -eq 0 ] && [ -n "$uids" ]; then
-              for uid in $uids; do
-                if [ -n "$uid" ]; then
-                  $cmd -t "$table" -A "APP_CHAIN$suffix" -m owner --uid-owner "$uid" -j ACCEPT
-                  log Info "Added bypass for UID $uid"
-                fi
-              done
-            fi
+            add_app_rules "$cmd" "$table" "APP_CHAIN$suffix" ACCEPT "bypass" $BYPASS_APPS_LIST
           else
             log Warn "App blacklist mode enabled but no bypass apps configured"
           fi
@@ -1024,15 +1015,7 @@ setup_proxy_chain() {
           ;;
         whitelist)
           if [ -n "$PROXY_APPS_LIST" ]; then
-            uids=$(find_packages_uid $PROXY_APPS_LIST)
-            if [ $? -eq 0 ] && [ -n "$uids" ]; then
-              for uid in $uids; do
-                if [ -n "$uid" ]; then
-                  $cmd -t "$table" -A "APP_CHAIN$suffix" -m owner --uid-owner "$uid" -j RETURN
-                  log Info "Added proxy for UID $uid"
-                fi
-              done
-            fi
+            add_app_rules "$cmd" "$table" "APP_CHAIN$suffix" RETURN "proxy" $PROXY_APPS_LIST
           else
             log Warn "App whitelist mode enabled but no proxy apps configured"
           fi
@@ -1237,36 +1220,35 @@ cleanup_chain() {
   fi
 
   if [ "$PROXY_TCP" -eq 1 ]; then
-    $cmd -t "$table" -D PREROUTING -p tcp -j "PROXY_PREROUTING$suffix" 2>/dev/null || true
-    $cmd -t "$table" -D OUTPUT -p tcp -j "PROXY_OUTPUT$suffix" 2>/dev/null || true
+    $cmd -t "$table" -D PREROUTING -p tcp -j "PROXY_PREROUTING$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D OUTPUT -p tcp -j "PROXY_OUTPUT$suffix" 2> /dev/null || true
   fi
   if [ "$PROXY_UDP" -eq 1 ] || [ "$mode" = "redirect" ]; then
-    $cmd -t "$table" -D PREROUTING -p udp -j "PROXY_PREROUTING$suffix" 2>/dev/null || true
-    $cmd -t "$table" -D OUTPUT -p udp -j "PROXY_OUTPUT$suffix" 2>/dev/null || true
+    $cmd -t "$table" -D PREROUTING -p udp -j "PROXY_PREROUTING$suffix" 2> /dev/null || true
+    $cmd -t "$table" -D OUTPUT -p udp -j "PROXY_OUTPUT$suffix" 2> /dev/null || true
   fi
 
-  local chains="PROXY_PREROUTING$suffix PROXY_OUTPUT$suffix DIVERT$suffix PROXY_IP$suffix BYPASS_IP$suffix BYPASS_INTERFACE$suffix PROXY_INTERFACE$suffix DNS_HIJACK_PRE$suffix DNS_HIJACK_OUT$suffix APP_CHAIN$suffix MAC_CHAIN$suffix"
-
-  for c in $chains; do
-    $cmd -t "$table" -F "$c" 2>/dev/null || true
-    $cmd -t "$table" -X "$c" 2>/dev/null || true
+  local base
+  for base in $PROXY_CHAIN_BASES; do
+    $cmd -t "$table" -F "$base$suffix" 2> /dev/null || true
+    $cmd -t "$table" -X "$base$suffix" 2> /dev/null || true
   done
 
   if [ "$mode" = "tproxy" ] && [ "$DNS_HIJACK_ENABLE" -eq 2 ]; then
-    $cmd -t nat -D PREROUTING -i "$MOBILE_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
-    $cmd -t nat -D PREROUTING -i "$WIFI_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
-    $cmd -t nat -D PREROUTING -i "$USB_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
+    $cmd -t nat -D PREROUTING -i "$MOBILE_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+    $cmd -t nat -D PREROUTING -i "$WIFI_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+    $cmd -t nat -D PREROUTING -i "$USB_INTERFACE" -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
     local interface
     if [ -n "$OTHER_PROXY_INTERFACES" ]; then
       for interface in $OTHER_PROXY_INTERFACES; do
-        $cmd -t nat -D PREROUTING -i "$interface" -j "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
+        $cmd -t nat -D PREROUTING -i "$interface" -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
       done
     fi
-    $cmd -t nat -D OUTPUT -p udp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT 2>/dev/null || true
-    $cmd -t nat -D OUTPUT -p tcp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT 2>/dev/null || true
-    $cmd -t nat -D OUTPUT -j "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
-    $cmd -t nat -F "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
-    $cmd -t nat -X "NAT_DNS_HIJACK$suffix" 2>/dev/null || true
+    $cmd -t nat -D OUTPUT -p udp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT 2> /dev/null || true
+    $cmd -t nat -D OUTPUT -p tcp --dport 53 -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -j ACCEPT 2> /dev/null || true
+    $cmd -t nat -D OUTPUT -j "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+    $cmd -t nat -F "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
+    $cmd -t nat -X "NAT_DNS_HIJACK$suffix" 2> /dev/null || true
   fi
 
   log Info "$mode_name chains for IPv${family} cleanup completed"
@@ -1325,8 +1307,8 @@ cleanup_ipset() {
   log Debug "[EXEC] ipset destroy cnip"
   log Debug "[EXEC] ipset destroy cnip6"
   if [ "$DRY_RUN" -eq 0 ]; then
-    ipset destroy cnip 2>/dev/null || true
-    ipset destroy cnip6 2>/dev/null || true
+    ipset destroy cnip 2> /dev/null || true
+    ipset destroy cnip6 2> /dev/null || true
     log Info "ipset 'cnip' and 'cnip6' destroyed"
   fi
 }
@@ -1433,8 +1415,8 @@ block_loopback_traffic() {
       iptables -t filter -A OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT
       ;;
     disable)
-      ip6tables -t filter -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT 2>/dev/null || true
-      iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT 2>/dev/null || true
+      ip6tables -t filter -D OUTPUT -d ::1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT 2> /dev/null || true
+      iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp -m owner --uid-owner "$CORE_USER" --gid-owner "$CORE_GROUP" -m tcp --dport "$PROXY_TCP_PORT" -j REJECT 2> /dev/null || true
       ;;
   esac
 }
@@ -1442,7 +1424,7 @@ block_loopback_traffic() {
 block_quic() {
   case "$1" in
     enable)
-      iptables -N BLOCK_QUIC 2>/dev/null || true
+      iptables -N BLOCK_QUIC 2> /dev/null || true
       iptables -F BLOCK_QUIC
       if [ "$BYPASS_CN_IP" -eq 1 ]; then
         iptables -A BLOCK_QUIC -p udp --dport 443 -m set ! --match-set cnip dst -j REJECT
@@ -1454,7 +1436,7 @@ block_quic() {
       iptables -I OUTPUT -j BLOCK_QUIC
 
       if [ "$PROXY_IPV6" -eq 1 ]; then
-        ip6tables -N BLOCK_QUIC6 2>/dev/null || true
+        ip6tables -N BLOCK_QUIC6 2> /dev/null || true
         ip6tables -F BLOCK_QUIC6
         if [ "$BYPASS_CN_IP" -eq 1 ]; then
           ip6tables -A BLOCK_QUIC6 -p udp --dport 443 -m set ! --match-set cnip6 dst -j REJECT
@@ -1470,13 +1452,13 @@ block_quic() {
     disable)
       local chain
       for chain in INPUT FORWARD OUTPUT; do
-        iptables -D "$chain" -j BLOCK_QUIC 2>/dev/null || true
-        ip6tables -D "$chain" -j BLOCK_QUIC6 2>/dev/null || true
+        iptables -D "$chain" -j BLOCK_QUIC 2> /dev/null || true
+        ip6tables -D "$chain" -j BLOCK_QUIC6 2> /dev/null || true
       done
-      iptables -F BLOCK_QUIC 2>/dev/null || true
-      iptables -X BLOCK_QUIC 2>/dev/null || true
-      ip6tables -F BLOCK_QUIC6 2>/dev/null || true
-      ip6tables -X BLOCK_QUIC6 2>/dev/null || true
+      iptables -F BLOCK_QUIC 2> /dev/null || true
+      iptables -X BLOCK_QUIC 2> /dev/null || true
+      ip6tables -F BLOCK_QUIC6 2> /dev/null || true
+      ip6tables -X BLOCK_QUIC6 2> /dev/null || true
       log Info "QUIC traffic blocking disabled"
       ;;
   esac
@@ -1768,7 +1750,7 @@ main() {
       ;;
     restart)
       log Info "Restarting proxy..."
-      stop_proxy
+      (stop_proxy)
       call_func post_stop_hook
       sleep 2
       call_func pre_start_hook

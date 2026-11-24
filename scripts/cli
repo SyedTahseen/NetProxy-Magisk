@@ -63,6 +63,9 @@ find_config() {
 require_config() {
   local name="${1:-}" path
   [ -n "$name" ] || error "Please specify a config name"
+  case "$name" in
+    _meta | _meta.json) error "Not a node config: $name" ;;
+  esac
   path=$(find_config "$name")
   [ -n "$path" ] || error "Config not found: $name"
   echo "$path"
@@ -76,6 +79,10 @@ print_config_entry() {
   else
     echo "    $name"
   fi
+}
+
+package_uid() {
+  awk -v pkg="${1#*:}" '$1==pkg {print $2; exit}' /data/system/packages.list 2> /dev/null || true
 }
 
 app_list_key() {
@@ -375,7 +382,7 @@ cmd_proxy() {
       local apps count=0
       apps=$(conf_get "$TPROXY_CONF" "$key")
       for pkg in $apps; do
-        uid=$(awk -v pkg="${pkg#*:}" '$1==pkg {print $2}' /data/system/packages.list 2> /dev/null) || uid=""
+        uid=$(package_uid "$pkg")
         if [ -n "$uid" ]; then
           echo "  $pkg (UID: $uid)"
         else
@@ -400,7 +407,7 @@ cmd_proxy() {
           ;;
       esac
 
-      if [ -z "$(awk -v pkg="${package#*:}" '$1==pkg {print $2}' /data/system/packages.list 2> /dev/null || true)" ]; then
+      if [ -z "$(package_uid "$package")" ]; then
         warn "App not found: $package (will still be added to the list)"
       fi
 
