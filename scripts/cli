@@ -230,7 +230,6 @@ cmd_config() {
       [ -n "$node_link" ] || error "Please provide a node link"
 
       info "Parsing node link..."
-      mkdir -p "$DEFAULT_GROUP_DIR"
       if sh "$SCRIPTS_DIR/utils/import-link.sh" "$node_link"; then
         info "Node added successfully"
       else
@@ -244,7 +243,6 @@ cmd_config() {
       [ -f "$wg_file" ] || error "File not found: $wg_file"
 
       info "Importing WireGuard config..."
-      mkdir -p "$DEFAULT_GROUP_DIR"
       sh "$SCRIPTS_DIR/utils/import-wireguard.sh" "$wg_file" "${2:-}" || error "Failed to import WireGuard config"
       ;;
 

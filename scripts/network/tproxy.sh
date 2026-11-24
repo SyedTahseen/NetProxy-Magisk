@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/system/bin/sh
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 readonly SCRIPT_VERSION="v26.11.23"
@@ -377,7 +377,9 @@ check_root() {
 }
 
 check_dependencies() {
-  export PATH="$PATH:/data/data/com.termux/files/usr/bin"
+  # Make the bundled binaries (ipset) available even when this script is not
+  # started through service.sh, e.g. `cli proxy reload`.
+  export PATH="$SCRIPT_DIR/../../bin:$PATH"
 
   if [ "$DRY_RUN" -eq 1 ]; then
     log Debug "Skip dependency check"
@@ -424,8 +426,7 @@ setup_busybox() {
   done
 
   if [ -n "$found_bb" ]; then
-    local bb_dir=$(dirname "$found_bb")
-    export PATH="$PATH:$bb_dir"
+    export PATH="$PATH:$(dirname "$found_bb")"
     log Info "BusyBox detected and added to PATH: $found_bb"
   else
     log Warn "No BusyBox found in common root paths"
@@ -768,12 +769,8 @@ setup_proxy_chain() {
     cmd="ip6tables"
   fi
 
-  local mode_name="$mode"
-  if [ "$mode" = "tproxy" ]; then
-    mode_name="TPROXY"
-  else
-    mode_name="REDIRECT"
-  fi
+  local mode_name="REDIRECT"
+  [ "$mode" = "tproxy" ] && mode_name="TPROXY"
 
   log Info "Setting up $mode_name chains for IPv${family}"
 
@@ -1229,12 +1226,8 @@ cleanup_chain() {
     cmd="ip6tables"
   fi
 
-  local mode_name="$mode"
-  if [ "$mode" = "tproxy" ]; then
-    mode_name="TPROXY"
-  else
-    mode_name="REDIRECT"
-  fi
+  local mode_name="REDIRECT"
+  [ "$mode" = "tproxy" ] && mode_name="TPROXY"
 
   log Info "Cleaning up $mode_name chains for IPv${family}"
 

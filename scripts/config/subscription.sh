@@ -25,7 +25,6 @@ Examples:
     $0 update "ProviderA"
     $0 remove "ProviderA"
 EOF
-  exit 0
 }
 
 sanitize_name() {
@@ -107,7 +106,7 @@ cmd_update() {
 }
 
 cmd_update_all() {
-  local count=0
+  local ok=0 failed=0
   local sub_dir meta_file name
   for sub_dir in "$OUTBOUNDS_DIR"/sub_*; do
     meta_file="$sub_dir/_meta.json"
@@ -115,11 +114,16 @@ cmd_update_all() {
 
     name=$(json_field "$meta_file" "name")
     echo "Updating subscription: $name"
-    cmd_update "$name"
-    count=$((count + 1))
+    # Subshell: cmd_update exits on failure and must not abort the whole loop
+    if (cmd_update "$name"); then
+      ok=$((ok + 1))
+    else
+      failed=$((failed + 1))
+    fi
   done
 
-  echo "Updated $count subscription(s)"
+  echo "Updated $ok subscription(s), $failed failed"
+  [ "$failed" -eq 0 ]
 }
 
 cmd_remove() {
@@ -213,7 +217,8 @@ case "${1:-}" in
     show_help
     ;;
   *)
-    echo "Error: unknown command '$1'"
-    show_help
+    echo "Error: unknown command '$1'" >&2
+    show_help >&2
+    exit 1
     ;;
 esac

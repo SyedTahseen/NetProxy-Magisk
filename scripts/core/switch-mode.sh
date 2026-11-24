@@ -33,10 +33,15 @@ replace_routing_rules() {
   fi
 }
 
+replace_proxy_outbound() {
+  local outbound_file="$1"
+  "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
+  "$XRAY_BIN" api ado --server="$API_SERVER" "$outbound_file" 2> /dev/null
+}
+
 switch_to_freedom() {
   log "INFO" "Switching outbound to freedom..."
-  "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
-  if "$XRAY_BIN" api ado --server="$API_SERVER" "$FREEDOM_OUTBOUND" 2> /dev/null; then
+  if replace_proxy_outbound "$FREEDOM_OUTBOUND"; then
     log "INFO" "Switched to freedom outbound"
     return 0
   else
@@ -55,8 +60,7 @@ restore_proxy_outbound() {
   fi
 
   log "INFO" "Restoring node config: $current_config"
-  "$XRAY_BIN" api rmo --server="$API_SERVER" "proxy" 2> /dev/null || true
-  if "$XRAY_BIN" api ado --server="$API_SERVER" "$current_config" 2> /dev/null; then
+  if replace_proxy_outbound "$current_config"; then
     log "INFO" "Node outbound restored"
     return 0
   else

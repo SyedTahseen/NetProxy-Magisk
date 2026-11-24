@@ -7,7 +7,6 @@ config/tproxy/runtime_tproxy.conf
 config/tproxy/ipv6_backup.conf
 config/tproxy/*.zone
 config/tproxy/tmp/
-config/.sub_status
 config/xray/outbounds/.tmp_*
 
 *.zip
