@@ -32,6 +32,7 @@ readonly EXECUTABLE_FILES="
     scripts/utils/socks-fix.sh
     scripts/utils/import-link.sh
     scripts/utils/import-wireguard.sh
+    scripts/utils/test-node.sh
     scripts/utils/oneplus_a16_fix.sh
 "
 
