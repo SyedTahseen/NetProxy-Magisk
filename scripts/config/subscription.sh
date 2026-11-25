@@ -161,6 +161,22 @@ cmd_list() {
   done
 }
 
+# Try a proxy-bypassing fetch first (works even if the current node is dead), then fall
+# back to fetching through the proxy (for subscription URLs that are blocked directly).
+fetch_nodes() {
+  local url="$1" dir="$2" runner="$3"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  if net_bypass_exec sh -c 'exec timeout 60 "$@"' sh "$MODDIR/bin/proxylink" -sub "$url" -dns -format xray -dir "$dir" >> "$LOG_FILE" 2>&1; then
+    return 0
+  fi
+  log "WARN" "Direct fetch failed, retrying through the proxy"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  # shellcheck disable=SC2086
+  $runner "$MODDIR/bin/proxylink" -sub "$url" -dns -format xray -dir "$dir" >> "$LOG_FILE" 2>&1
+}
+
 update_subscription() {
   local url="$1"
   local sub_dir="$2"
@@ -175,7 +191,7 @@ update_subscription() {
   local runner=""
   command -v timeout > /dev/null 2>&1 && runner="timeout 300"
 
-  if $runner "$MODDIR/bin/proxylink" -sub "$url" -dns -format xray -dir "$tmp_dir" >> "$LOG_FILE" 2>&1; then
+  if fetch_nodes "$url" "$tmp_dir" "$runner"; then
     if [ -z "$(find "$tmp_dir" -name "*.json" 2> /dev/null | head -n 1)" ]; then
       rm -rf "$tmp_dir"
       log "ERROR" "Subscription returned no nodes, keeping the existing ones"

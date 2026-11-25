@@ -33,9 +33,13 @@ tmp_dir="$OUTBOUNDS_DIR/.tmp_import_$$"
 rm -rf "$tmp_dir"
 mkdir -p "$tmp_dir"
 
-if ! (cd "$tmp_dir" && "$MODDIR/bin/proxylink" -parse "$link" -format xray -auto); then
-  rm -rf "$tmp_dir"
-  exit 1
+# -dns resolves hostnames to IPs (like the subscription path); fall back to a plain parse
+if ! (cd "$tmp_dir" && net_bypass_exec "$MODDIR/bin/proxylink" -parse "$link" -format xray -auto -dns) > /dev/null 2>&1; then
+  rm -f "$tmp_dir"/*.json
+  if ! (cd "$tmp_dir" && "$MODDIR/bin/proxylink" -parse "$link" -format xray -auto); then
+    rm -rf "$tmp_dir"
+    exit 1
+  fi
 fi
 
 imported=0

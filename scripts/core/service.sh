@@ -32,6 +32,18 @@ get_pid() {
   pidof -s "$XRAY_BIN" 2> /dev/null || true
 }
 
+# Android's Go resolver cannot read /etc/resolv.conf, so a node given by hostname only
+# resolves reliably when sockopt.domainStrategy makes Xray use its own DNS module.
+warn_domain_outbound() {
+  local f="$1" host
+  grep -q '"domainStrategy"' "$f" 2> /dev/null && return 0
+  host=$(grep -o '"address": *"[^"]*"' "$f" 2> /dev/null | sed 's/.*: *"\(.*\)"/\1/' | grep '[A-Za-z]' | grep -v ':' | head -n 1)
+  if [ -n "$host" ]; then
+    log "WARN" "Outbound uses hostname '$host' without sockopt.domainStrategy; if it fails to connect, re-import the node (resolves to IP) or set domainStrategy to UseIP"
+  fi
+  return 0
+}
+
 do_start() {
   log "INFO" "========== Starting Xray Service =========="
 
@@ -82,6 +94,15 @@ do_start() {
       sed 's/"tproxy"[[:space:]]*:[[:space:]]*"tproxy"/"tproxy": "redirect"/' "$f" > "$run_confdir/$(basename "$f")"
     done
   fi
+
+  # Validate the merged config first: a bad geosite/geoip tag or typo otherwise only
+  # shows up as a crashed process one second later.
+  if ! "$XRAY_BIN" run -test -confdir "$run_confdir" -config "$routing_config" -config "$outbound_config" > "$XRAY_LOG_FILE" 2>&1; then
+    tail -n 8 "$XRAY_LOG_FILE" >> "$LOG_FILE" 2> /dev/null
+    die "Xray config test failed (unknown geosite/geoip tag or bad JSON?), see $XRAY_LOG_FILE"
+  fi
+
+  warn_domain_outbound "$outbound_config"
 
   nohup "$BUSYBOX" setuidgid root:net_admin "$XRAY_BIN" run \
     -confdir "$run_confdir" \

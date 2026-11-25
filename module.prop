@@ -1,7 +1,7 @@
 id=netproxy
 name=NetProxy
-version=v6.0.6
-versionCode=508
+version=v6.0.7
+versionCode=509
 author=Fanju
 description=Proxy tool based on the Xray core
 actionIcon=webroot/logo.png

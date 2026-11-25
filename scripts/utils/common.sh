@@ -32,3 +32,21 @@ unique_json_path() {
   done
   echo "$target"
 }
+
+# Run a command as the core user (root:net_admin) so the tproxy rules do NOT capture its
+# traffic. Used for module downloads so they still work when the active node is dead.
+net_bypass_exec() {
+  local bb="" p
+  for p in /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox /data/adb/magisk/busybox; do
+    if [ -x "$p" ]; then
+      bb="$p"
+      break
+    fi
+  done
+  [ -n "$bb" ] || bb=$(command -v busybox 2> /dev/null || true)
+  if [ -n "$bb" ]; then
+    "$bb" setuidgid root:net_admin "$@"
+  else
+    "$@"
+  fi
+}

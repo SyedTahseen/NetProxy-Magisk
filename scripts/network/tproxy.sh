@@ -64,6 +64,7 @@ readonly DEFAULT_BYPASS_MACS_LIST=""
 readonly DEFAULT_MAC_PROXY_MODE="blacklist"
 
 readonly DEFAULT_BLOCK_QUIC=0
+readonly DEFAULT_BLOCK_DOT=1
 
 readonly DEFAULT_DRY_RUN=0
 
@@ -179,6 +180,7 @@ load_config() {
   BYPASS_MACS_LIST="${BYPASS_MACS_LIST:-$DEFAULT_BYPASS_MACS_LIST}"
   MAC_PROXY_MODE="${MAC_PROXY_MODE:-$DEFAULT_MAC_PROXY_MODE}"
   BLOCK_QUIC="${BLOCK_QUIC:-$DEFAULT_BLOCK_QUIC}"
+  BLOCK_DOT="${BLOCK_DOT:-$DEFAULT_BLOCK_DOT}"
   SKIP_CHECK_FEATURE="${SKIP_CHECK_FEATURE:-0}"
 
   if [ "$VERBOSE" -eq 1 ]; then
@@ -195,7 +197,7 @@ load_config() {
           APP_PROXY_ENABLE PROXY_APPS_LIST BYPASS_APPS_LIST APP_PROXY_MODE \
           BYPASS_CN_IP CN_IP_FILE CN_IPV6_FILE CN_IP_URL CN_IPV6_URL \
           MAC_FILTER_ENABLE PROXY_MACS_LIST BYPASS_MACS_LIST MAC_PROXY_MODE \
-          BLOCK_QUIC SKIP_CHECK_FEATURE; do
+          BLOCK_QUIC BLOCK_DOT SKIP_CHECK_FEATURE; do
       eval "log Debug \"$_var: \$$_var\""
     done
   fi
@@ -223,6 +225,7 @@ save_runtime_config() {
     echo "OTHER_PROXY_INTERFACES=$OTHER_PROXY_INTERFACES"
     echo "BYPASS_CN_IP=$BYPASS_CN_IP"
     echo "BLOCK_QUIC=$BLOCK_QUIC"
+    echo "BLOCK_DOT=$BLOCK_DOT"
     echo "DNS_HIJACK_ENABLE=$DNS_HIJACK_ENABLE"
     echo "TABLE_ID=$TABLE_ID"
     echo "MARK_VALUE=$MARK_VALUE"
@@ -985,6 +988,10 @@ setup_proxy_chain() {
     log Info "Other interface $OTHER_BYPASS_INTERFACES will bypass proxy"
   fi
 
+  # Interfaces not named above (e.g. a hotspot called ap0/swlan0, tun*, eth*) must not
+  # fall through to TPROXY: bypass them like the explicitly bypassed ones.
+  $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -j ACCEPT
+
   log Info "Interface proxy rules configuration completed"
 
   local mac
@@ -1392,6 +1399,7 @@ start_proxy() {
   log Info "Proxy setup completed"
   block_loopback_traffic enable
   [ "$BLOCK_QUIC" -eq 1 ] && block_quic enable
+  [ "$BLOCK_DOT" -eq 1 ] && block_dot enable
   if [ "$PROXY_IPV6" -eq -1 ]; then
     manage_ipv6 disable || log Warn "Failed to disable IPv6 stack"
   fi
@@ -1425,6 +1433,7 @@ stop_proxy() {
   protect_api disable
   block_loopback_traffic disable
   block_quic disable
+  block_dot disable
   if [ "$PROXY_IPV6" -eq -1 ]; then
     manage_ipv6 restore || log Warn "Failed to restore IPv6 settings"
   fi
@@ -1498,6 +1507,28 @@ block_quic() {
       ip6tables -F BLOCK_QUIC6 2> /dev/null || true
       ip6tables -X BLOCK_QUIC6 2> /dev/null || true
       log Info "QUIC traffic blocking disabled"
+      ;;
+  esac
+}
+
+# Android "Private DNS" (DNS-over-TLS, tcp/853) is not hijacked by the DNS rules, so DNS
+# (and AAAA answers) would bypass Xray. Rejecting it makes Android fall back to plain
+# port-53 DNS, which IS hijacked. Strict-mode Private DNS will stop resolving while this is on.
+block_dot() {
+  local cmd
+  case "$1" in
+    enable)
+      block_dot disable
+      for cmd in iptables ip6tables; do
+        $cmd -t filter -I OUTPUT -p tcp --dport 853 -m owner ! --gid-owner "$CORE_GROUP" -j REJECT --reject-with tcp-reset \
+          || log Warn "Failed to add DoT block rule ($cmd)"
+      done
+      log Info "DNS-over-TLS (tcp/853) blocked for non-core traffic"
+      ;;
+    disable)
+      for cmd in iptables ip6tables; do
+        $cmd -t filter -D OUTPUT -p tcp --dport 853 -m owner ! --gid-owner "$CORE_GROUP" -j REJECT --reject-with tcp-reset 2> /dev/null || true
+      done
       ;;
   esac
 }
