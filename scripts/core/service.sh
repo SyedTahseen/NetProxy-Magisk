@@ -42,67 +42,64 @@ warn_domain_outbound() {
   return 0
 }
 
-do_start() {
-  log "INFO" "========== Starting Xray Service =========="
+RUN_CONFDIR=""
+ROUTING_CONFIG=""
+OUTBOUND_CONFIG=""
 
-  local running_pid
-  running_pid=$(get_pid)
-  if [ -n "$running_pid" ]; then
-    log "WARN" "Xray is already running (PID: $running_pid)"
-    return 0
-  fi
-
+# Resolve config paths and validate them. Exits (die) on failure, so callers
+# can run it BEFORE touching a running core.
+prepare_core() {
   [ -f "$MODULE_CONF" ] || die "Module config file does not exist: $MODULE_CONF"
   . "$MODULE_CONF"
 
-  local outbound_config
-  outbound_config=$(printf '%s' "${CURRENT_CONFIG:-}" | tr -d '"')
-  [ -n "$outbound_config" ] || die "Unable to resolve the outbound config path"
+  OUTBOUND_CONFIG=$(printf '%s' "${CURRENT_CONFIG:-}" | tr -d '"')
+  [ -n "$OUTBOUND_CONFIG" ] || die "Unable to resolve the outbound config path"
 
   local outbound_mode="${OUTBOUND_MODE:-rule}"
   log "INFO" "Current outbound mode: $outbound_mode"
 
-  local routing_config
   case "$outbound_mode" in
-    global) routing_config="$CONFDIR/routing/global.json" ;;
-    direct) routing_config="$CONFDIR/routing/direct.json" ;;
-    *) routing_config="$CONFDIR/routing/rule.json" ;;
+    global) ROUTING_CONFIG="$CONFDIR/routing/global.json" ;;
+    direct) ROUTING_CONFIG="$CONFDIR/routing/direct.json" ;;
+    *) ROUTING_CONFIG="$CONFDIR/routing/rule.json" ;;
   esac
 
   [ -d "$CONFDIR" ] || die "confdir directory does not exist: $CONFDIR"
-  [ -f "$routing_config" ] || die "Routing config file does not exist: $routing_config"
-  [ -f "$outbound_config" ] || die "Outbound config file does not exist: $outbound_config"
+  [ -f "$ROUTING_CONFIG" ] || die "Routing config file does not exist: $ROUTING_CONFIG"
+  [ -f "$OUTBOUND_CONFIG" ] || die "Outbound config file does not exist: $OUTBOUND_CONFIG"
 
   log "INFO" "Config directory: $CONFDIR"
-  log "INFO" "Routing config: $routing_config"
-  log "INFO" "Outbound config: $outbound_config"
+  log "INFO" "Routing config: $ROUTING_CONFIG"
+  log "INFO" "Outbound config: $OUTBOUND_CONFIG"
 
-  local run_confdir="$CONFDIR"
+  RUN_CONFDIR="$CONFDIR"
   local proxy_mode_used
   proxy_mode_used=$("$MODDIR/scripts/network/tproxy.sh" detect -d "$MODDIR/config/tproxy" 2> /dev/null | tail -n 1)
   if [ "$proxy_mode_used" = "redirect" ]; then
     log "WARN" "Kernel lacks TPROXY, using REDIRECT mode (TCP only)"
-    run_confdir="$MODDIR/config/xray/.runtime_confdir"
-    rm -rf "$run_confdir"
-    mkdir -p "$run_confdir"
+    RUN_CONFDIR="$MODDIR/config/xray/.runtime_confdir"
+    rm -rf "$RUN_CONFDIR"
+    mkdir -p "$RUN_CONFDIR"
     local f
     for f in "$CONFDIR"/*.json; do
       [ -f "$f" ] || continue
-      sed 's/"tproxy"[[:space:]]*:[[:space:]]*"tproxy"/"tproxy": "redirect"/' "$f" > "$run_confdir/$(basename "$f")"
+      sed 's/"tproxy"[[:space:]]*:[[:space:]]*"tproxy"/"tproxy": "redirect"/' "$f" > "$RUN_CONFDIR/$(basename "$f")"
     done
   fi
 
-  if ! "$XRAY_BIN" run -test -confdir "$run_confdir" -config "$routing_config" -config "$outbound_config" > "$XRAY_LOG_FILE" 2>&1; then
+  if ! "$XRAY_BIN" run -test -confdir "$RUN_CONFDIR" -config "$ROUTING_CONFIG" -config "$OUTBOUND_CONFIG" > "$XRAY_LOG_FILE" 2>&1; then
     tail -n 8 "$XRAY_LOG_FILE" >> "$LOG_FILE" 2> /dev/null
     die "Xray config test failed (unknown geosite/geoip tag or bad JSON?), see $XRAY_LOG_FILE"
   fi
 
-  warn_domain_outbound "$outbound_config"
+  warn_domain_outbound "$OUTBOUND_CONFIG"
+}
 
+launch_core() {
   nohup "$BUSYBOX" setuidgid root:net_admin "$XRAY_BIN" run \
-    -confdir "$run_confdir" \
-    -config "$routing_config" \
-    -config "$outbound_config" \
+    -confdir "$RUN_CONFDIR" \
+    -config "$ROUTING_CONFIG" \
+    -config "$OUTBOUND_CONFIG" \
     > "$XRAY_LOG_FILE" 2>&1 &
 
   local xray_pid=$!
@@ -113,12 +110,53 @@ do_start() {
   if ! kill -0 "$xray_pid" 2> /dev/null; then
     die "Xray process failed to start, please check the config"
   fi
+}
+
+do_start() {
+  log "INFO" "========== Starting Xray Service =========="
+
+  local running_pid
+  running_pid=$(get_pid)
+  if [ -n "$running_pid" ]; then
+    log "WARN" "Xray is already running (PID: $running_pid)"
+    return 0
+  fi
+
+  prepare_core
+  launch_core
 
   if ! "$MODDIR/scripts/network/tproxy.sh" start -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1; then
     log "WARN" "TProxy rule setup reported errors, traffic may not be proxied (see $LOG_FILE)"
   fi
 
   log "INFO" "========== Xray Service Started =========="
+}
+
+stop_core() {
+  local pid
+  pid=$(get_pid)
+
+  if [ -z "$pid" ]; then
+    log "INFO" "No running Xray process found"
+    return 0
+  fi
+
+  log "INFO" "Terminating Xray process (PID: $pid)..."
+
+  if kill "$pid" 2> /dev/null; then
+    local count=0
+    while kill -0 "$pid" 2> /dev/null && [ "$count" -lt "$KILL_TIMEOUT" ]; do
+      sleep 1
+      count=$((count + 1))
+    done
+
+    if kill -0 "$pid" 2> /dev/null; then
+      log "WARN" "Process did not respond to SIGTERM, sending SIGKILL"
+      kill -9 "$pid" 2> /dev/null || true
+    fi
+  fi
+
+  log "INFO" "Xray process terminated"
 }
 
 do_stop() {
@@ -128,31 +166,40 @@ do_stop() {
   "$MODDIR/scripts/network/tproxy.sh" stop -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1 \
     || log "WARN" "TProxy rule cleanup reported errors"
 
-  local pid
-  pid=$(get_pid)
-
-  if [ -z "$pid" ]; then
-    log "INFO" "No running Xray process found"
-  else
-    log "INFO" "Terminating Xray process (PID: $pid)..."
-
-    if kill "$pid" 2> /dev/null; then
-      local count=0
-      while kill -0 "$pid" 2> /dev/null && [ "$count" -lt "$KILL_TIMEOUT" ]; do
-        sleep 1
-        count=$((count + 1))
-      done
-
-      if kill -0 "$pid" 2> /dev/null; then
-        log "WARN" "Process did not respond to SIGTERM, sending SIGKILL"
-        kill -9 "$pid" 2> /dev/null || true
-      fi
-    fi
-
-    log "INFO" "Xray process terminated"
-  fi
+  stop_core
 
   log "INFO" "========== Xray Service Stopped =========="
+}
+
+# Drop every connection held by the core (client side and outbound side) by
+# restarting only the Xray process. TProxy rules stay in place, so traffic is
+# blocked (not leaked) for the ~2s the core is down. The new config is
+# validated first; if it is bad the old core keeps running.
+do_flush() {
+  if [ -z "$(get_pid)" ]; then
+    log "INFO" "Xray is not running, nothing to flush"
+    return 0
+  fi
+
+  log "INFO" "========== Flushing Connections (core restart) =========="
+  prepare_core
+  stop_core
+  launch_core
+  log "INFO" "========== Connections Flushed =========="
+}
+
+# Re-apply TProxy rules, then flush so old connections follow the new rules.
+do_reload_rules() {
+  if [ -z "$(get_pid)" ]; then
+    log "INFO" "Xray is not running, rules apply on next start"
+    return 0
+  fi
+
+  log "INFO" "Reloading TProxy rules..."
+  "$MODDIR/scripts/network/tproxy.sh" restart -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1 \
+    || log "WARN" "TProxy rule reload reported errors"
+
+  do_flush
 }
 
 do_restart() {
@@ -186,12 +233,14 @@ do_status() {
 
 show_usage() {
   cat << EOF
-Usage: $(basename "$0") {start|stop|restart|status}
+Usage: $(basename "$0") {start|stop|restart|flush|reload-rules|status}
 
 Commands:
   start     Start the Xray service
   stop      Stop the Xray service
   restart   Restart the Xray service
+  flush     Restart only the Xray core to drop all existing connections
+  reload-rules  Re-apply TProxy rules and flush old connections
   status    Show service status
 
 Examples:
@@ -210,6 +259,12 @@ main() {
       ;;
     restart)
       do_restart
+      ;;
+    flush)
+      do_flush
+      ;;
+    reload-rules)
+      do_reload_rules
       ;;
     status)
       do_status

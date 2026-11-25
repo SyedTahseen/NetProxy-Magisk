@@ -122,6 +122,8 @@ main() {
 
   update_mode_config "$target_mode"
 
+  flush_connections
+
   log "INFO" "========== Mode Switch Complete =========="
   echo "success"
 }

@@ -40,6 +40,8 @@ hot_switch() {
 
   conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
 
+  flush_connections
+
   log "INFO" "========== Hot Switch Complete =========="
 }
 

@@ -48,3 +48,16 @@ net_bypass_exec() {
     "$@"
   fi
 }
+
+# Drop existing connections so a node/mode/rule change takes effect at once.
+# Disable with FLUSH_ON_CHANGE=0 in module.conf.
+flush_connections() {
+  if [ "$(conf_get "$MODULE_CONF" "FLUSH_ON_CHANGE" "1")" != "1" ]; then
+    log "INFO" "FLUSH_ON_CHANGE=0, keeping existing connections"
+    return 0
+  fi
+  log "INFO" "Flushing existing connections..."
+  sh "$MODDIR/scripts/core/service.sh" flush > /dev/null 2>&1 \
+    || log "WARN" "Connection flush failed (service.log has details)"
+  return 0
+}
