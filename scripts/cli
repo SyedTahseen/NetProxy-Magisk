@@ -96,7 +96,7 @@ app_list_key() {
 reload_rules() {
   if is_running; then
     info "Reloading proxy rules..."
-    sh "$SERVICE_SCRIPT" reload-rules
+    sh "$SCRIPTS_DIR/network/tproxy.sh" restart -d "$TPROXY_DIR"
     info "Rules applied"
   else
     info "Service is not running, takes effect on next start"

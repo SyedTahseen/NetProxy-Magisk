@@ -15,16 +15,7 @@ conf_get() {
 }
 
 conf_set() {
-  local file="$1" key="$2" value="$3" escaped inner
-  inner="${value#\"}"
-  inner="${inner%\"}"
-  case "$inner" in
-    *[\"\$\`\\]* | *'
-'*)
-      echo "conf_set: refusing unsafe characters in value for $key" >&2
-      return 1
-      ;;
-  esac
+  local file="$1" key="$2" value="$3" escaped
   if grep -q "^$key=" "$file" 2> /dev/null; then
     escaped=$(printf '%s' "$value" | sed 's/[&|\\]/\\&/g')
     sed -i "s|^$key=.*|$key=$escaped|" "$file"
@@ -56,17 +47,4 @@ net_bypass_exec() {
   else
     "$@"
   fi
-}
-
-# Drop existing connections so a node/mode/rule change takes effect at once.
-# Disable with FLUSH_ON_CHANGE=0 in module.conf.
-flush_connections() {
-  if [ "$(conf_get "$MODULE_CONF" "FLUSH_ON_CHANGE" "1")" != "1" ]; then
-    log "INFO" "FLUSH_ON_CHANGE=0, keeping existing connections"
-    return 0
-  fi
-  log "INFO" "Flushing existing connections..."
-  sh "$MODDIR/scripts/core/service.sh" flush > /dev/null 2>&1 \
-    || log "WARN" "Connection flush failed (service.log has details)"
-  return 0
 }

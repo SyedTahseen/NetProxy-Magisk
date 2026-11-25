@@ -104,13 +104,6 @@ main() {
   local current_mode
   current_mode=$(conf_get "$MODULE_CONF" "OUTBOUND_MODE" "rule")
 
-  if [ -z "$(pidof -s "$XRAY_BIN" 2> /dev/null)" ]; then
-    update_mode_config "$target_mode"
-    log "INFO" "Service is not running, mode saved: it takes effect on next start"
-    echo "success"
-    return 0
-  fi
-
   log "INFO" "========== Switching Outbound Mode =========="
   log "INFO" "Current mode: $current_mode -> target mode: $target_mode"
 
@@ -128,8 +121,6 @@ main() {
   replace_routing_rules "$routing_file" || fail "failed to apply routing rules"
 
   update_mode_config "$target_mode"
-
-  flush_connections
 
   log "INFO" "========== Mode Switch Complete =========="
   echo "success"

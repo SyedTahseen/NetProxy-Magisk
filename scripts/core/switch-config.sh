@@ -16,17 +16,6 @@ hot_switch() {
 
   [ -f "$config_file" ] || die "Config file does not exist: $config_file"
 
-  case "$config_file" in
-    *[\"\$\`\\]* | *'
-'*) die "Refusing config path with unsafe characters: $config_file" ;;
-  esac
-
-  if [ -z "$(pidof -s "$XRAY_BIN" 2> /dev/null)" ]; then
-    conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
-    log "INFO" "Service is not running, config saved: it takes effect on next start"
-    return 0
-  fi
-
   log "INFO" "========== Starting Config Hot Switch =========="
   log "INFO" "New config: $config_file"
 
@@ -50,8 +39,6 @@ hot_switch() {
   fi
 
   conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
-
-  flush_connections
 
   log "INFO" "========== Hot Switch Complete =========="
 }
