@@ -40,11 +40,6 @@ hot_switch() {
 
   conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
 
-  if [ "$(conf_get "$MODULE_CONF" "SWITCH_RESTART" "1")" = "1" ]; then
-    log "INFO" "Restarting Xray to drop connections still using the old outbound"
-    sh "$MODDIR/scripts/core/service.sh" restart || log "WARN" "Restart after switch failed"
-  fi
-
   log "INFO" "========== Hot Switch Complete =========="
 }
 
