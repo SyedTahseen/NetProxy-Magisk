@@ -11,10 +11,6 @@ readonly XRAY_BIN="$MODDIR/bin/xray"
 . "$MODDIR/scripts/utils/log.sh"
 . "$MODDIR/scripts/utils/common.sh"
 
-# Xray cannot drop live connections itself: after the outbound swap, apps that
-# were already connected keep using the old server. Destroy the sockets that go
-# to the old server so Xray closes the matching app connections and the apps
-# reconnect through the new outbound.
 kill_old_connections() {
   local old_cfg="$1" addr port out
 
@@ -24,22 +20,21 @@ kill_old_connections() {
   }
   [ -n "$old_cfg" ] && [ -f "$old_cfg" ] || return 0
 
-  addr=$(json_field "$old_cfg" "address")
-  port=$(grep -o '"port": *[0-9]*' "$old_cfg" 2> /dev/null | head -n 1 | grep -o '[0-9]*$')
+  addr=$(json_field "$old_cfg" "address") || addr=""
+  port=$(grep -o '"port": *[0-9]*' "$old_cfg" 2> /dev/null | head -n 1 | grep -o '[0-9]*$') || port=""
 
   if [ -z "$addr" ] || [ -z "$port" ]; then
     log "WARN" "Could not read old server address/port, open connections not closed"
     return 0
   fi
 
-  # Only IPs work for the socket filter (re-import the node to store an IP)
   if ! printf '%s' "$addr" | grep -Eq '^[0-9]+(\.[0-9]+){3}$|:'; then
     log "WARN" "Old server '$addr' is a hostname, open connections not closed"
     return 0
   fi
 
   out=$(ss -K -t dst "$addr" dport = ":$port" 2>&1) || true
-  log "INFO" "Closed $(printf '%s\n' "$out" | grep -c ESTAB) connection(s) to old server $addr:$port"
+  log "INFO" "Closed $(printf '%s\n' "$out" | grep -c ESTAB || true) connection(s) to old server $addr:$port"
 }
 
 hot_switch() {

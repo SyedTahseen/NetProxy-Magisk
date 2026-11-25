@@ -33,15 +33,24 @@ unique_json_path() {
   echo "$target"
 }
 
-net_bypass_exec() {
-  local bb="" p
+find_busybox() {
+  local p
   for p in /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox /data/adb/magisk/busybox; do
     if [ -x "$p" ]; then
-      bb="$p"
-      break
+      echo "$p"
+      return 0
     fi
   done
-  [ -n "$bb" ] || bb=$(command -v busybox 2> /dev/null || true)
+  command -v busybox 2> /dev/null || true
+}
+
+get_pid() {
+  pidof -s "$XRAY_BIN" 2> /dev/null || true
+}
+
+net_bypass_exec() {
+  local bb
+  bb=$(find_busybox)
   if [ -n "$bb" ]; then
     "$bb" setuidgid root:net_admin "$@"
   else

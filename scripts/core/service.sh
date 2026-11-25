@@ -11,29 +11,13 @@ readonly CONFDIR="$MODDIR/config/xray/confdir"
 
 readonly KILL_TIMEOUT=5
 
-detect_busybox() {
-  local path
-  for path in "/data/adb/ksu/bin/busybox" "/data/adb/ap/bin/busybox" "/data/adb/magisk/busybox"; do
-    if [ -f "$path" ]; then
-      echo "$path"
-      return 0
-    fi
-  done
-  echo "busybox"
-}
-
-readonly BUSYBOX="$(detect_busybox)"
-
 . "$MODDIR/scripts/utils/log.sh"
+. "$MODDIR/scripts/utils/common.sh"
+
+readonly BUSYBOX="$(find_busybox)"
 
 export PATH="$MODDIR/bin:$PATH"
-# geoip.dat / geosite.dat ship next to the xray binary; pin the lookup path
-# explicitly (Xray docs: XRAY_LOCATION_ASSET) instead of relying on the default.
 export XRAY_LOCATION_ASSET="$MODDIR/bin"
-
-get_pid() {
-  pidof -s "$XRAY_BIN" 2> /dev/null || true
-}
 
 warn_domain_outbound() {
   local f="$1" host

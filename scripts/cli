@@ -34,10 +34,6 @@ error() {
   exit 1
 }
 
-get_pid() {
-  pidof -s "$XRAY_BIN" 2> /dev/null || true
-}
-
 is_running() {
   [ -n "$(get_pid)" ]
 }
@@ -520,8 +516,7 @@ main() {
     proxy) cmd_proxy "$@" ;;
     -h | --help | help | "") show_help ;;
     *)
-      printf "${RED}[ERROR]${NC} Unknown command: %s\nUse 'help' for usage\n" "$cmd" >&2
-      exit 1
+      error "Unknown command: $cmd (use 'help' for usage)"
       ;;
   esac
 }

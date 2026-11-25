@@ -522,28 +522,10 @@ ip6tables() {
   run_ipt_command ip6tables "$@"
 }
 
-ip_rule() {
-  log Debug "[EXEC] ip rule $*"
+run_ip() {
+  log Debug "[EXEC] ip $*"
   [ "$DRY_RUN" -eq 1 ] && return 0
-  command ip rule "$@"
-}
-
-ip6_rule() {
-  log Debug "[EXEC] ip -6 rule $*"
-  [ "$DRY_RUN" -eq 1 ] && return 0
-  command ip -6 rule "$@"
-}
-
-ip_route() {
-  log Debug "[EXEC] ip route $*"
-  [ "$DRY_RUN" -eq 1 ] && return 0
-  command ip route "$@"
-}
-
-ip6_route() {
-  log Debug "[EXEC] ip -6 route $*"
-  [ "$DRY_RUN" -eq 1 ] && return 0
-  command ip -6 route "$@"
+  command ip "$@"
 }
 
 get_package_uid() {
@@ -863,9 +845,6 @@ setup_proxy_chain() {
   _add_chain_jumps "PROXY_OUTPUT$suffix" "$_perf_ct" \
     "APP_CHAIN$suffix" "BYPASS_IP$suffix" "BYPASS_INTERFACE$suffix" "DNS_HIJACK_OUT$suffix"
 
-  # PROXY_IPv*_LIST: destinations that must be proxied even when they fall inside a bypass range.
-  # RETURN at the head of BYPASS_IP skips every bypass rule below it and lets the packet continue
-  # to the interface/app filters and the final TPROXY/REDIRECT rule.
   local subnet4
   local subnet6
   if [ "$family" = "6" ]; then
@@ -1178,17 +1157,9 @@ setup_dns_hijack() {
   esac
 }
 
-setup_tproxy_chain4() {
-  setup_proxy_chain 4 "tproxy"
-}
-
 setup_redirect_chain4() {
   log Warn "REDIRECT mode only supports TCP"
   setup_proxy_chain 4 "redirect"
-}
-
-setup_tproxy_chain6() {
-  setup_proxy_chain 6 "tproxy"
 }
 
 setup_redirect_chain6() {
@@ -1200,40 +1171,41 @@ setup_redirect_chain6() {
   setup_proxy_chain 6 "redirect"
 }
 
-setup_routing4() {
-  log Info "Setting up routing rules for IPv4"
-
-  ip_rule add fwmark "$MARK_VALUE" table "$TABLE_ID" pref "$TABLE_ID" || {
-    log Error "Failed to add IPv4 routing rule"
-    return 1
-  }
-  ip_route add local 0.0.0.0/0 dev lo table "$TABLE_ID" || {
-    log Error "Failed to add IPv4 route"
-    return 1
-  }
-
-  log Debug "[EXEC] echo 1 > /proc/sys/net/ipv4/ip_forward"
-  [ "$DRY_RUN" -eq 0 ] && echo 1 > /proc/sys/net/ipv4/ip_forward
-
-  log Info "IPv4 routing setup completed"
+routing_params() {
+  if [ "$1" -eq 6 ]; then
+    R_LABEL="IPv6"
+    R_MARK="$MARK_VALUE6"
+    R_FAMILY="-6"
+    R_DEST="::/0"
+    R_FWD_FILE="/proc/sys/net/ipv6/conf/all/forwarding"
+    R_FWD_NAME="IPv6 forwarding"
+  else
+    R_LABEL="IPv4"
+    R_MARK="$MARK_VALUE"
+    R_FAMILY=""
+    R_DEST="0.0.0.0/0"
+    R_FWD_FILE="/proc/sys/net/ipv4/ip_forward"
+    R_FWD_NAME="ip_forward"
+  fi
 }
 
-setup_routing6() {
-  log Info "Setting up routing rules for IPv6"
+setup_routing() {
+  routing_params "$1"
+  log Info "Setting up routing rules for $R_LABEL"
 
-  ip6_rule add fwmark "$MARK_VALUE6" table "$TABLE_ID" pref "$TABLE_ID" || {
-    log Error "Failed to add IPv6 routing rule"
+  run_ip $R_FAMILY rule add fwmark "$R_MARK" table "$TABLE_ID" pref "$TABLE_ID" || {
+    log Error "Failed to add $R_LABEL routing rule"
     return 1
   }
-  ip6_route add local ::/0 dev lo table "$TABLE_ID" || {
-    log Error "Failed to add IPv6 route"
+  run_ip $R_FAMILY route add local "$R_DEST" dev lo table "$TABLE_ID" || {
+    log Error "Failed to add $R_LABEL route"
     return 1
   }
 
-  log Debug "[EXEC] echo 1 > /proc/sys/net/ipv6/conf/all/forwarding"
-  [ "$DRY_RUN" -eq 0 ] && echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
+  log Debug "[EXEC] echo 1 > $R_FWD_FILE"
+  [ "$DRY_RUN" -eq 0 ] && echo 1 > "$R_FWD_FILE"
 
-  log Info "IPv6 routing setup completed"
+  log Info "$R_LABEL routing setup completed"
 }
 
 cleanup_chain() {
@@ -1292,14 +1264,6 @@ cleanup_chain() {
   log Info "$mode_name chains for IPv${family} cleanup completed"
 }
 
-cleanup_tproxy_chain4() {
-  cleanup_chain 4 "tproxy"
-}
-
-cleanup_tproxy_chain6() {
-  cleanup_chain 6 "tproxy"
-}
-
 cleanup_redirect_chain4() {
   cleanup_chain 4 "redirect"
 }
@@ -1312,26 +1276,16 @@ cleanup_redirect_chain6() {
   cleanup_chain 6 "redirect"
 }
 
-cleanup_routing4() {
-  log Info "Cleaning up IPv4 routing rules"
+cleanup_routing() {
+  routing_params "$1"
+  log Info "Cleaning up $R_LABEL routing rules"
 
-  ip_rule del fwmark "$MARK_VALUE" table "$TABLE_ID" pref "$TABLE_ID"
-  ip_route del local 0.0.0.0/0 dev lo table "$TABLE_ID"
+  run_ip $R_FAMILY rule del fwmark "$R_MARK" table "$TABLE_ID" pref "$TABLE_ID"
+  run_ip $R_FAMILY route del local "$R_DEST" dev lo table "$TABLE_ID"
 
-  log Debug "ip_forward left untouched (Android manages it for tethering)"
+  log Debug "$R_FWD_NAME left untouched (Android manages it for tethering)"
 
-  log Info "IPv4 routing cleanup completed"
-}
-
-cleanup_routing6() {
-  log Info "Cleaning up IPv6 routing rules"
-
-  ip6_rule del fwmark "$MARK_VALUE6" table "$TABLE_ID" pref "$TABLE_ID"
-  ip6_route del local ::/0 dev lo table "$TABLE_ID"
-
-  log Debug "IPv6 forwarding left untouched (Android manages it for tethering)"
-
-  log Info "IPv6 routing cleanup completed"
+  log Info "$R_LABEL routing cleanup completed"
 }
 
 cleanup_ipset() {
@@ -1392,11 +1346,11 @@ start_proxy() {
   fi
 
   if [ "$USE_TPROXY" -eq 1 ]; then
-    setup_tproxy_chain4
-    setup_routing4
+    setup_proxy_chain 4 "tproxy"
+    setup_routing 4
     if [ "$PROXY_IPV6" -eq 1 ]; then
-      setup_tproxy_chain6
-      setup_routing6
+      setup_proxy_chain 6 "tproxy"
+      setup_routing 6
     fi
   else
     setup_redirect_chain4
@@ -1423,11 +1377,11 @@ stop_proxy() {
   fi
   if [ "$USE_TPROXY" -eq 1 ]; then
     log Info "Cleaning up TPROXY chains"
-    cleanup_tproxy_chain4
-    cleanup_routing4
+    cleanup_chain 4 "tproxy"
+    cleanup_routing 4
     if [ "$PROXY_IPV6" -eq 1 ]; then
-      cleanup_tproxy_chain6
-      cleanup_routing6
+      cleanup_chain 6 "tproxy"
+      cleanup_routing 6
     fi
   else
     log Info "Cleaning up REDIRECT chains"
@@ -1448,12 +1402,8 @@ stop_proxy() {
   [ "$DRY_RUN" -eq 1 ] || rm -f "$CONFIG_DIR/runtime_tproxy.conf" 2> /dev/null
 }
 
-# After the rules are reloaded (app mode / app list change), connections that
-# were already open keep their old route. Destroy established TCP sockets
-# (loopback excluded) so apps reconnect under the new rules.
 drop_established_connections() {
   [ "$DRY_RUN" -eq 1 ] && return 0
-  # Opt out by adding DROP_CONNECTIONS=0 to tproxy.conf
   grep -q '^DROP_CONNECTIONS="\{0,1\}0' "$CONFIG_DIR/tproxy.conf" 2> /dev/null && return 0
   command -v ss > /dev/null 2>&1 || {
     log Warn "ss not found, open connections keep their old route until they close"
