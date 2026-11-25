@@ -172,10 +172,7 @@ update_subscription() {
   rm -rf "$tmp_dir"
   mkdir -p "$tmp_dir"
 
-  local runner=""
-  command -v timeout > /dev/null 2>&1 && runner="timeout 90"
-
-  if $runner "$MODDIR/bin/proxylink" -sub "$url" -dns -format xray -dir "$tmp_dir" >> "$LOG_FILE" 2>&1; then
+  if "$MODDIR/bin/proxylink" -sub "$url" -dns -format xray -dir "$tmp_dir" >> "$LOG_FILE" 2>&1; then
     if [ -z "$(find "$tmp_dir" -name "*.json" 2> /dev/null | head -n 1)" ]; then
       rm -rf "$tmp_dir"
       log "ERROR" "Subscription returned no nodes, keeping the existing ones"
