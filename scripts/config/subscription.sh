@@ -161,8 +161,6 @@ cmd_list() {
   done
 }
 
-# Try a proxy-bypassing fetch first (works even if the current node is dead), then fall
-# back to fetching through the proxy (for subscription URLs that are blocked directly).
 fetch_nodes() {
   local url="$1" dir="$2" runner="$3"
   rm -rf "$dir"
@@ -173,7 +171,6 @@ fetch_nodes() {
   log "WARN" "Direct fetch failed, retrying through the proxy"
   rm -rf "$dir"
   mkdir -p "$dir"
-  # shellcheck disable=SC2086
   $runner "$MODDIR/bin/proxylink" -sub "$url" -dns -format xray -dir "$dir" >> "$LOG_FILE" 2>&1
 }
 
@@ -199,15 +196,12 @@ update_subscription() {
       return 1
     fi
 
-    # Only files that contain SOCKS nodes need the credential fix
     local socks_files
     socks_files=$(grep -l '"socks"' "$tmp_dir"/*.json 2> /dev/null || true)
     if [ -n "$socks_files" ]; then
-      # shellcheck disable=SC2086
       sh "$MODDIR/scripts/utils/socks-fix.sh" json $socks_files >> "$LOG_FILE" 2>&1 || true
     fi
 
-    # proxylink names duplicates "Name_2.json"; use "Name 2.json" like the default group
     local f fname base num
     for f in "$tmp_dir"/*_[0-9]*.json; do
       [ -f "$f" ] || continue

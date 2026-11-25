@@ -454,8 +454,6 @@ check_kernel_feature() {
       return 1
     fi
   else
-    # No /proc/config.gz on this kernel: TPROXY is probed for real, every other
-    # feature is assumed present (a missing one shows up as an iptables error).
     if [ "$feature" = "NETFILTER_XT_TARGET_TPROXY" ]; then
       probe_tproxy
       return $?
@@ -989,8 +987,6 @@ setup_proxy_chain() {
     log Info "Other interface $OTHER_BYPASS_INTERFACES will bypass proxy"
   fi
 
-  # Interfaces not named above (e.g. a hotspot called ap0/swlan0, tun*, eth*) must not
-  # fall through to TPROXY: bypass them like the explicitly bypassed ones.
   $cmd -t "$table" -A "PROXY_INTERFACE$suffix" -j ACCEPT
 
   log Info "Interface proxy rules configuration completed"
@@ -1456,7 +1452,6 @@ block_loopback_traffic() {
 }
 
 protect_api() {
-  # The Xray gRPC API on 127.0.0.1 has no authentication: only root may reach it.
   case "$1" in
     enable)
       iptables -t filter -D OUTPUT -d 127.0.0.1 -p tcp --dport "$API_PORT" -m owner ! --uid-owner 0 -j REJECT 2> /dev/null || true
@@ -1512,9 +1507,6 @@ block_quic() {
   esac
 }
 
-# Android "Private DNS" (DNS-over-TLS, tcp/853) is not hijacked by the DNS rules, so DNS
-# (and AAAA answers) would bypass Xray. Rejecting it makes Android fall back to plain
-# port-53 DNS, which IS hijacked. Strict-mode Private DNS will stop resolving while this is on.
 block_dot() {
   local cmd
   case "$1" in

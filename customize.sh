@@ -204,8 +204,6 @@ set_permissions() {
     fi
   done
 
-  # Everything except webroot/ (the root manager sets webroot permissions and
-  # SELinux context itself): directories 0755, files 0644, then executables below.
   local entry
   set_perm "$MODPATH" 0 0 0755
   for entry in "$MODPATH"/* "$MODPATH"/.[!.]*; do
@@ -235,7 +233,6 @@ check_arch() {
   esac
 }
 
-# Preserved files hide newer shipped defaults, so keep the shipped copy as <file>.new
 SHIPPED_DIR="$TMPDIR/netproxy_shipped"
 readonly NEW_DEFAULT_FILES="
     xray/confdir/02_dns.json
