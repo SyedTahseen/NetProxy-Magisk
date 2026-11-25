@@ -191,6 +191,20 @@ update_subscription() {
       sh "$MODDIR/scripts/utils/socks-fix.sh" json $socks_files >> "$LOG_FILE" 2>&1 || true
     fi
 
+    # proxylink names duplicates "Name_2.json"; use "Name 2.json" like the default group
+    local f fname base num
+    for f in "$tmp_dir"/*_[0-9]*.json; do
+      [ -f "$f" ] || continue
+      fname="${f##*/}"
+      fname="${fname%.json}"
+      num="${fname##*_}"
+      base="${fname%_*}"
+      case "$num" in '' | *[!0-9]*) continue ;; esac
+      [ -f "$tmp_dir/$base.json" ] || continue
+      [ -e "$tmp_dir/$base $num.json" ] && continue
+      mv "$f" "$tmp_dir/$base $num.json"
+    done
+
     find "$sub_dir" -name "*.json" ! -name "_meta.json" -delete
     mv "$tmp_dir"/*.json "$sub_dir/"
     rm -rf "$tmp_dir"
