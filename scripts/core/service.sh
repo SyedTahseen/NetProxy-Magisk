@@ -27,6 +27,8 @@ readonly BUSYBOX="$(detect_busybox)"
 . "$MODDIR/scripts/utils/log.sh"
 
 export PATH="$MODDIR/bin:$PATH"
+# geoip.dat / geosite.dat ship next to the xray binary; pin the lookup path
+# explicitly (Xray docs: XRAY_LOCATION_ASSET) instead of relying on the default.
 export XRAY_LOCATION_ASSET="$MODDIR/bin"
 
 get_pid() {
@@ -43,18 +45,22 @@ warn_domain_outbound() {
   return 0
 }
 
-# Resolve configs and launch Xray. Does NOT touch firewall rules.
-# $1 = 1 to run "xray -test" first (slow: loads geo files), 0 to skip it.
-# Returns non-zero (without exiting) on failure so callers can fall back.
-launch_xray() {
-  local do_test="${1:-1}"
+do_start() {
+  log "INFO" "========== Starting Xray Service =========="
 
-  [ -f "$MODULE_CONF" ] || { log "ERROR" "Module config file does not exist: $MODULE_CONF"; return 1; }
+  local running_pid
+  running_pid=$(get_pid)
+  if [ -n "$running_pid" ]; then
+    log "WARN" "Xray is already running (PID: $running_pid)"
+    return 0
+  fi
+
+  [ -f "$MODULE_CONF" ] || die "Module config file does not exist: $MODULE_CONF"
   . "$MODULE_CONF"
 
   local outbound_config
   outbound_config=$(printf '%s' "${CURRENT_CONFIG:-}" | tr -d '"')
-  [ -n "$outbound_config" ] || { log "ERROR" "Unable to resolve the outbound config path"; return 1; }
+  [ -n "$outbound_config" ] || die "Unable to resolve the outbound config path"
 
   local outbound_mode="${OUTBOUND_MODE:-rule}"
   log "INFO" "Current outbound mode: $outbound_mode"
@@ -66,9 +72,9 @@ launch_xray() {
     *) routing_config="$CONFDIR/routing/rule.json" ;;
   esac
 
-  [ -d "$CONFDIR" ] || { log "ERROR" "confdir directory does not exist: $CONFDIR"; return 1; }
-  [ -f "$routing_config" ] || { log "ERROR" "Routing config file does not exist: $routing_config"; return 1; }
-  [ -f "$outbound_config" ] || { log "ERROR" "Outbound config file does not exist: $outbound_config"; return 1; }
+  [ -d "$CONFDIR" ] || die "confdir directory does not exist: $CONFDIR"
+  [ -f "$routing_config" ] || die "Routing config file does not exist: $routing_config"
+  [ -f "$outbound_config" ] || die "Outbound config file does not exist: $outbound_config"
 
   log "INFO" "Config directory: $CONFDIR"
   log "INFO" "Routing config: $routing_config"
@@ -89,12 +95,9 @@ launch_xray() {
     done
   fi
 
-  if [ "$do_test" = "1" ]; then
-    if ! "$XRAY_BIN" run -test -confdir "$run_confdir" -config "$routing_config" -config "$outbound_config" > "$XRAY_LOG_FILE" 2>&1; then
-      tail -n 8 "$XRAY_LOG_FILE" >> "$LOG_FILE" 2> /dev/null
-      log "ERROR" "Xray config test failed (unknown geosite/geoip tag or bad JSON?), see $XRAY_LOG_FILE"
-      return 1
-    fi
+  if ! "$XRAY_BIN" run -test -confdir "$run_confdir" -config "$routing_config" -config "$outbound_config" > "$XRAY_LOG_FILE" 2>&1; then
+    tail -n 8 "$XRAY_LOG_FILE" >> "$LOG_FILE" 2> /dev/null
+    die "Xray config test failed (unknown geosite/geoip tag or bad JSON?), see $XRAY_LOG_FILE"
   fi
 
   warn_domain_outbound "$outbound_config"
@@ -108,69 +111,17 @@ launch_xray() {
   local xray_pid=$!
   log "INFO" "Xray process started, PID: $xray_pid"
 
-  # Wait until Xray reports "started" (or dies), instead of a fixed sleep.
-  local i=0
-  while [ "$i" -lt 40 ]; do
-    if ! kill -0 "$xray_pid" 2> /dev/null; then
-      tail -n 8 "$XRAY_LOG_FILE" >> "$LOG_FILE" 2> /dev/null
-      log "ERROR" "Xray process exited during startup, please check the config"
-      return 1
-    fi
-    grep -q "started" "$XRAY_LOG_FILE" 2> /dev/null && return 0
-    sleep 0.25
-    i=$((i + 1))
-  done
+  sleep 1
 
-  # No "started" line after 10s but still alive: accept it.
-  kill -0 "$xray_pid" 2> /dev/null
-}
-
-do_start() {
-  log "INFO" "========== Starting Xray Service =========="
-
-  local running_pid
-  running_pid=$(get_pid)
-  if [ -n "$running_pid" ]; then
-    log "WARN" "Xray is already running (PID: $running_pid)"
-    return 0
+  if ! kill -0 "$xray_pid" 2> /dev/null; then
+    die "Xray process failed to start, please check the config"
   fi
-
-  launch_xray 1 || exit 1
 
   if ! "$MODDIR/scripts/network/tproxy.sh" start -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1; then
     log "WARN" "TProxy rule setup reported errors, traffic may not be proxied (see $LOG_FILE)"
   fi
 
   log "INFO" "========== Xray Service Started =========="
-}
-
-# Fast restart used when switching proxies: kill Xray and relaunch it with the
-# firewall rules left in place. Existing connections die with the old process,
-# and while Xray is down new connections fail (nothing listens on the TPROXY
-# port) instead of leaking out directly.
-do_fast_restart() {
-  log "INFO" "========== Fast Restart (firewall rules kept) =========="
-
-  local pid
-  pid=$(get_pid)
-  if [ -n "$pid" ]; then
-    kill -9 "$pid" 2> /dev/null || true
-    local n=0
-    while kill -0 "$pid" 2> /dev/null && [ "$n" -lt 20 ]; do
-      sleep 0.1
-      n=$((n + 1))
-    done
-  fi
-
-  # Skip "-test": a bad config shows up as a startup failure below, and the
-  # caller then falls back to the previous config.
-  if launch_xray 0; then
-    log "INFO" "========== Fast Restart Complete =========="
-    return 0
-  fi
-
-  log "ERROR" "Fast restart failed"
-  return 1
 }
 
 do_stop() {
@@ -238,13 +189,12 @@ do_status() {
 
 show_usage() {
   cat << EOF
-Usage: $(basename "$0") {start|stop|restart|fast-restart|status}
+Usage: $(basename "$0") {start|stop|restart|status}
 
 Commands:
   start     Start the Xray service
   stop      Stop the Xray service
   restart   Restart the Xray service
-  fast-restart  Restart Xray only, keep firewall rules
   status    Show service status
 
 Examples:
@@ -263,9 +213,6 @@ main() {
       ;;
     restart)
       do_restart
-      ;;
-    fast-restart)
-      do_fast_restart
       ;;
     status)
       do_status
