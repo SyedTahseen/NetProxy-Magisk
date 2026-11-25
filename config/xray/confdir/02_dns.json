@@ -7,12 +7,6 @@
                 "2001:4860:4860::8888",
                 "2001:4860:4860::8844"
             ],
-            "dns.alidns.com": [
-                "223.5.5.5",
-                "223.6.6.6",
-                "2400:3200::1",
-                "2400:3200:baba::1"
-            ],
             "one.one.one.one": [
                 "1.1.1.1",
                 "1.0.0.1",
@@ -36,14 +30,6 @@
                 "104.16.133.229",
                 "2606:4700::6810:84e5",
                 "2606:4700::6810:85e5"
-            ],
-            "dot.pub": [
-                "1.12.12.12",
-                "120.53.53.53"
-            ],
-            "doh.pub": [
-                "1.12.12.12",
-                "120.53.53.53"
             ],
             "dns.quad9.net": [
                 "9.9.9.9",
@@ -80,40 +66,14 @@
         },
         "servers": [
             {
-                "address": "https://dns.alidns.com/dns-query",
+                "address": "localhost",
                 "domains": [
-                    "domain:alidns.com",
-                    "domain:doh.pub",
-                    "domain:dot.pub",
-                    "domain:360.cn",
-                    "domain:onedns.net"
+                    "geosite:private"
                 ],
                 "skipFallback": true
             },
-            {
-                "address": "https://cloudflare-dns.com/dns-query",
-                "domains": [
-                    "geosite:google"
-                ],
-                "skipFallback": true
-            },
-            {
-                "address": "https://dns.alidns.com/dns-query",
-                "domains": [
-                    "geosite:private",
-                    "geosite:cn"
-                ],
-                "skipFallback": true
-            },
-            {
-                "address": "223.5.5.5",
-                "domains": [
-                    "full:dns.alidns.com",
-                    "full:cloudflare-dns.com"
-                ],
-                "skipFallback": true
-            },
-            "https://cloudflare-dns.com/dns-query"
+            "https://cloudflare-dns.com/dns-query",
+            "https://dns.google/dns-query"
         ],
         "queryStrategy": "UseIPv4"
     }
