@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      xray_version:
+        description: "Xray release tag to bundle (empty = latest)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -20,9 +25,13 @@ jobs:
       - name: Download the latest Xray (Android arm64)
         env:
           GH_TOKEN: ${{ github.token }}
+          XRAY_VERSION_INPUT: ${{ github.event.inputs.xray_version }}
         run: |
           set -euo pipefail
-          TAG=$(gh api repos/XTLS/Xray-core/releases/latest --jq .tag_name)
+          TAG="${XRAY_VERSION_INPUT:-}"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh api repos/XTLS/Xray-core/releases/latest --jq .tag_name)
+          fi
           echo "XRAY_TAG=$TAG" >> "$GITHUB_ENV"
           echo "Latest Xray release: $TAG"
 

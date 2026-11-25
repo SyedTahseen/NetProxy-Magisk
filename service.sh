@@ -6,13 +6,15 @@ readonly MODULE_CONF="$MODDIR/config/module.conf"
 readonly LOG_FILE="$MODDIR/logs/service.log"
 
 . "$MODDIR/scripts/utils/log.sh"
+. "$MODDIR/scripts/utils/common.sh"
 
 load_module_config() {
   AUTO_START=1
   ONEPLUS_A16_FIX=0
 
   if [ -f "$MODULE_CONF" ]; then
-    . "$MODULE_CONF"
+    AUTO_START=$(conf_get "$MODULE_CONF" "AUTO_START" "1")
+    ONEPLUS_A16_FIX=$(conf_get "$MODULE_CONF" "ONEPLUS_A16_FIX" "0")
     log "INFO" "Module config loaded"
   else
     log "WARN" "Module config file not found, using defaults"
@@ -27,10 +29,6 @@ wait_for_boot() {
   done
   log "INFO" "System boot complete"
 
-  while [ ! -d "/sdcard/Android" ]; do
-    sleep 1
-  done
-  log "INFO" "Storage mounted"
 }
 
 check_device_specific() {

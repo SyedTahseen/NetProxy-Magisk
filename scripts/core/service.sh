@@ -25,6 +25,7 @@ detect_busybox() {
 readonly BUSYBOX="$(detect_busybox)"
 
 . "$MODDIR/scripts/utils/log.sh"
+. "$MODDIR/scripts/utils/common.sh"
 
 export PATH="$MODDIR/bin:$PATH"
 
@@ -50,12 +51,14 @@ OUTBOUND_CONFIG=""
 # can run it BEFORE touching a running core.
 prepare_core() {
   [ -f "$MODULE_CONF" ] || die "Module config file does not exist: $MODULE_CONF"
-  . "$MODULE_CONF"
 
-  OUTBOUND_CONFIG=$(printf '%s' "${CURRENT_CONFIG:-}" | tr -d '"')
+  # module.conf is read as data (never sourced): a node name containing
+  # shell metacharacters must not be able to run code as root.
+  OUTBOUND_CONFIG=$(conf_get "$MODULE_CONF" "CURRENT_CONFIG")
   [ -n "$OUTBOUND_CONFIG" ] || die "Unable to resolve the outbound config path"
 
-  local outbound_mode="${OUTBOUND_MODE:-rule}"
+  local outbound_mode
+  outbound_mode=$(conf_get "$MODULE_CONF" "OUTBOUND_MODE" "rule")
   log "INFO" "Current outbound mode: $outbound_mode"
 
   case "$outbound_mode" in
@@ -124,6 +127,14 @@ do_start() {
 
   prepare_core
   launch_core
+
+  # A crashed run leaves its rules behind (they would black-hole traffic and
+  # get duplicated by a plain start), so clear them first.
+  if command iptables -w 100 -t mangle -nL PROXY_PREROUTING > /dev/null 2>&1 \
+    || command iptables -w 100 -t nat -nL PROXY_PREROUTING > /dev/null 2>&1; then
+    log "WARN" "Stale TProxy rules found, cleaning them up before start"
+    "$MODDIR/scripts/network/tproxy.sh" stop -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1 || true
+  fi
 
   if ! "$MODDIR/scripts/network/tproxy.sh" start -d "$MODDIR/config/tproxy" >> "$LOG_FILE" 2>&1; then
     log "WARN" "TProxy rule setup reported errors, traffic may not be proxied (see $LOG_FILE)"

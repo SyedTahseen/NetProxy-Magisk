@@ -15,7 +15,16 @@ conf_get() {
 }
 
 conf_set() {
-  local file="$1" key="$2" value="$3" escaped
+  local file="$1" key="$2" value="$3" escaped inner
+  inner="${value#\"}"
+  inner="${inner%\"}"
+  case "$inner" in
+    *[\"\$\`\\]* | *'
+'*)
+      echo "conf_set: refusing unsafe characters in value for $key" >&2
+      return 1
+      ;;
+  esac
   if grep -q "^$key=" "$file" 2> /dev/null; then
     escaped=$(printf '%s' "$value" | sed 's/[&|\\]/\\&/g')
     sed -i "s|^$key=.*|$key=$escaped|" "$file"
