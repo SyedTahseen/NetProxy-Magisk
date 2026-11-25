@@ -17,6 +17,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate scripts and configs
+        run: |
+          set -euo pipefail
+          for f in customize.sh service.sh action.sh scripts/cli $(find scripts -name '*.sh'); do
+            sh -n "$f" || { echo "::error file=$f::shell syntax error"; exit 1; }
+          done
+          for f in $(find config -name '*.json'); do
+            python3 -m json.tool "$f" > /dev/null || { echo "::error file=$f::invalid JSON"; exit 1; }
+          done
+
       - name: Download the latest Xray (Android arm64)
         env:
           GH_TOKEN: ${{ github.token }}

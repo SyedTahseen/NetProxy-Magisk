@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-readonly SCRIPT_VERSION="v26.11.23"
+readonly SCRIPT_VERSION="v26.11.25"
 
 readonly DEFAULT_CORE_USER_GROUP="root:net_admin"
 readonly DEFAULT_ROUTING_MARK=""
@@ -68,7 +68,7 @@ readonly DEFAULT_BLOCK_DOT=1
 
 readonly DEFAULT_DRY_RUN=0
 
-readonly PROXY_CHAIN_BASES="PROXY_PREROUTING PROXY_OUTPUT DIVERT PROXY_IP BYPASS_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN MAC_CHAIN"
+readonly PROXY_CHAIN_BASES="PROXY_PREROUTING PROXY_OUTPUT DIVERT BYPASS_IP BYPASS_INTERFACE PROXY_INTERFACE DNS_HIJACK_PRE DNS_HIJACK_OUT APP_CHAIN MAC_CHAIN"
 
 log() {
   local level="$1"
@@ -218,6 +218,14 @@ save_runtime_config() {
     echo "# Runtime config slice for stop/cleanup only (generated at $(date))"
     echo "CONFIG_DIR=\"$CONFIG_DIR\""
     echo "CORE_USER_GROUP=\"$CORE_USER_GROUP\""
+    echo "CORE_USER=\"$CORE_USER\""
+    echo "CORE_GROUP=\"$CORE_GROUP\""
+    echo "PROXY_TCP_PORT=\"$PROXY_TCP_PORT\""
+    echo "API_PORT=\"$API_PORT\""
+    echo "DNS_PORT=\"$DNS_PORT\""
+    echo "MOBILE_INTERFACE=\"$MOBILE_INTERFACE\""
+    echo "WIFI_INTERFACE=\"$WIFI_INTERFACE\""
+    echo "USB_INTERFACE=\"$USB_INTERFACE\""
     echo "PROXY_TCP=\"$PROXY_TCP\""
     echo "PROXY_UDP=\"$PROXY_UDP\""
     echo "PROXY_IPV6=\"$PROXY_IPV6\""
@@ -850,24 +858,27 @@ setup_proxy_chain() {
   fi
 
   _add_chain_jumps "PROXY_PREROUTING$suffix" "$_perf_ct" \
-    "PROXY_IP$suffix" "BYPASS_IP$suffix" "PROXY_INTERFACE$suffix" "MAC_CHAIN$suffix" "DNS_HIJACK_PRE$suffix"
+    "BYPASS_IP$suffix" "PROXY_INTERFACE$suffix" "MAC_CHAIN$suffix" "DNS_HIJACK_PRE$suffix"
 
   _add_chain_jumps "PROXY_OUTPUT$suffix" "$_perf_ct" \
-    "APP_CHAIN$suffix" "PROXY_IP$suffix" "BYPASS_IP$suffix" "BYPASS_INTERFACE$suffix" "DNS_HIJACK_OUT$suffix"
+    "APP_CHAIN$suffix" "BYPASS_IP$suffix" "BYPASS_INTERFACE$suffix" "DNS_HIJACK_OUT$suffix"
 
+  # PROXY_IPv*_LIST: destinations that must be proxied even when they fall inside a bypass range.
+  # RETURN at the head of BYPASS_IP skips every bypass rule below it and lets the packet continue
+  # to the interface/app filters and the final TPROXY/REDIRECT rule.
   local subnet4
   local subnet6
   if [ "$family" = "6" ]; then
     if [ -n "$PROXY_IPv6_LIST" ]; then
       for subnet6 in $PROXY_IPv6_LIST; do
-        $cmd -t "$table" -A "PROXY_IP$suffix" -d "$subnet6" -j RETURN
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -d "$subnet6" -j RETURN
       done
       log Info "Added proxy rules for PROXY IPv6 ranges"
     fi
   else
     if [ -n "$PROXY_IPv4_LIST" ]; then
       for subnet4 in $PROXY_IPv4_LIST; do
-        $cmd -t "$table" -A "PROXY_IP$suffix" -d "$subnet4" -j RETURN
+        $cmd -t "$table" -A "BYPASS_IP$suffix" -d "$subnet4" -j RETURN
       done
       log Info "Added proxy rules for PROXY IPv4 ranges"
     fi
