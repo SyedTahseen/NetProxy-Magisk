@@ -40,8 +40,6 @@ hot_switch() {
 
   conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
 
-  # Hot-swapping only affects new connections; long-lived ones (browser keep-alive, HTTP/2)
-  # stay on the old outbound. Restarting Xray drops them so the new node takes effect at once.
   if [ "$(conf_get "$MODULE_CONF" "SWITCH_RESTART" "1")" = "1" ]; then
     log "INFO" "Restarting Xray to drop connections still using the old outbound"
     sh "$MODDIR/scripts/core/service.sh" restart || log "WARN" "Restart after switch failed"

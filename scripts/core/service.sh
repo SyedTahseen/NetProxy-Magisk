@@ -27,8 +27,6 @@ readonly BUSYBOX="$(detect_busybox)"
 . "$MODDIR/scripts/utils/log.sh"
 
 export PATH="$MODDIR/bin:$PATH"
-# geoip.dat / geosite.dat ship next to the xray binary; pin the lookup path
-# explicitly (Xray docs: XRAY_LOCATION_ASSET) instead of relying on the default.
 export XRAY_LOCATION_ASSET="$MODDIR/bin"
 
 get_pid() {
