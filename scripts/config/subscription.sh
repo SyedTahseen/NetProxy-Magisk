@@ -173,7 +173,7 @@ update_subscription() {
   mkdir -p "$tmp_dir"
 
   local runner=""
-  command -v timeout > /dev/null 2>&1 && runner="timeout 90"
+  command -v timeout > /dev/null 2>&1 && runner="timeout 300"
 
   if $runner "$MODDIR/bin/proxylink" -sub "$url" -dns -format xray -dir "$tmp_dir" >> "$LOG_FILE" 2>&1; then
     if [ -z "$(find "$tmp_dir" -name "*.json" 2> /dev/null | head -n 1)" ]; then
@@ -183,10 +183,16 @@ update_subscription() {
       return 1
     fi
 
-    sh "$MODDIR/scripts/utils/socks-fix.sh" json "$tmp_dir"/*.json >> "$LOG_FILE" 2>&1 || true
+    # Only files that contain SOCKS nodes need the credential fix
+    local socks_files
+    socks_files=$(grep -l '"socks"' "$tmp_dir"/*.json 2> /dev/null || true)
+    if [ -n "$socks_files" ]; then
+      # shellcheck disable=SC2086
+      sh "$MODDIR/scripts/utils/socks-fix.sh" json $socks_files >> "$LOG_FILE" 2>&1 || true
+    fi
 
     find "$sub_dir" -name "*.json" ! -name "_meta.json" -delete
-    find "$tmp_dir" -name "*.json" -exec mv {} "$sub_dir/" \;
+    mv "$tmp_dir"/*.json "$sub_dir/"
     rm -rf "$tmp_dir"
     log "INFO" "Subscription update complete"
     echo "Nodes imported"
