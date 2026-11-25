@@ -10,4 +10,5 @@ config/xray/outbounds/.tmp_*
 *.zip
 
 config/.sub_status
+config/.sub_add_*
 config/xray/.runtime_confdir/

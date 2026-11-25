@@ -26,11 +26,6 @@ wait_for_boot() {
     sleep 1
   done
   log "INFO" "System boot complete"
-
-  while [ ! -d "/sdcard/Android" ]; do
-    sleep 1
-  done
-  log "INFO" "Storage mounted"
 }
 
 check_device_specific() {

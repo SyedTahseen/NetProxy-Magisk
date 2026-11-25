@@ -221,7 +221,7 @@ set_permissions() {
 }
 
 cleanup() {
-  rm -rf "$BACKUP_DIR" 2> /dev/null
+  rm -rf "$BACKUP_DIR" "$SHIPPED_DIR" 2> /dev/null
 }
 
 check_arch() {
@@ -233,7 +233,7 @@ check_arch() {
   esac
 }
 
-SHIPPED_DIR="$TMPDIR/netproxy_shipped"
+readonly SHIPPED_DIR="$TMPDIR/netproxy_shipped"
 readonly NEW_DEFAULT_FILES="
     xray/confdir/02_dns.json
     xray/confdir/routing/rule.json
