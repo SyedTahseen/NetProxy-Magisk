@@ -1448,6 +1448,35 @@ stop_proxy() {
   [ "$DRY_RUN" -eq 1 ] || rm -f "$CONFIG_DIR/runtime_tproxy.conf" 2> /dev/null
 }
 
+# After the rules are reloaded (app mode / app list change), connections that
+# were already open keep their old route. Destroy established TCP sockets
+# (loopback excluded) so apps reconnect under the new rules.
+drop_established_connections() {
+  [ "$DRY_RUN" -eq 1 ] && return 0
+  # Opt out by adding DROP_CONNECTIONS=0 to tproxy.conf
+  grep -q '^DROP_CONNECTIONS="\{0,1\}0' "$CONFIG_DIR/tproxy.conf" 2> /dev/null && return 0
+  command -v ss > /dev/null 2>&1 || {
+    log Warn "ss not found, open connections keep their old route until they close"
+    return 0
+  }
+
+  local peers peer addr port count=0
+  peers=$(ss -tn state established 2> /dev/null | awk '{print $NF}' | grep ':[0-9][0-9]*$' | sort -u)
+
+  for peer in $peers; do
+    port="${peer##*:}"
+    addr="${peer%:*}"
+    addr="${addr#\[}"
+    addr="${addr%\]}"
+    case "$addr" in
+      127.* | ::1 | ::ffff:127.* | "") continue ;;
+    esac
+    ss -K -t dst "$addr" dport = ":$port" > /dev/null 2>&1 && count=$((count + 1))
+  done
+
+  log Info "Closed established connections to $count remote endpoint(s)"
+}
+
 block_loopback_traffic() {
   case "$1" in
     enable)
@@ -1828,6 +1857,7 @@ main() {
       sleep 2
       call_func pre_start_hook
       start_proxy
+      drop_established_connections
       log Info "Proxy restarted"
       ;;
     detect)
