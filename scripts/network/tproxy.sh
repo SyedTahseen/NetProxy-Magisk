@@ -863,9 +863,6 @@ setup_proxy_chain() {
   _add_chain_jumps "PROXY_OUTPUT$suffix" "$_perf_ct" \
     "APP_CHAIN$suffix" "BYPASS_IP$suffix" "BYPASS_INTERFACE$suffix" "DNS_HIJACK_OUT$suffix"
 
-  # PROXY_IPv*_LIST: destinations that must be proxied even when they fall inside a bypass range.
-  # RETURN at the head of BYPASS_IP skips every bypass rule below it and lets the packet continue
-  # to the interface/app filters and the final TPROXY/REDIRECT rule.
   local subnet4
   local subnet6
   if [ "$family" = "6" ]; then

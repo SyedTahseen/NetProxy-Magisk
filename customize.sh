@@ -105,8 +105,6 @@ extract_module() {
 }
 
 verify_core_payload() {
-  # The CI build bundles bin/xray. Without it the sync step below would wipe a working
-  # core from an existing install, so refuse early instead.
   if [ ! -f "$MODPATH/bin/xray" ]; then
     print_error "bin/xray is missing from this zip (it is added by the CI build)"
     print_error "Flash the zip produced by the GitHub Actions workflow instead"

@@ -16,12 +16,36 @@ hot_switch() {
 
   [ -f "$config_file" ] || die "Config file does not exist: $config_file"
 
-  log "INFO" "========== Starting Config Hot Switch =========="
+  log "INFO" "========== Starting Config Switch =========="
   log "INFO" "New config: $config_file"
 
   local previous_config
   previous_config=$(conf_get "$MODULE_CONF" "CURRENT_CONFIG")
 
+  if [ "$(conf_get "$MODULE_CONF" "SWITCH_RESTART" "1")" = "1" ]; then
+    # Restart Xray (rules stay) so every old connection is dropped and apps
+    # reconnect through the new outbound.
+    conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
+    if sh "$MODDIR/scripts/core/service.sh" fast-restart; then
+      log "INFO" "========== Switch Complete =========="
+      return 0
+    fi
+
+    log "WARN" "New config failed to start, restoring previous: $previous_config"
+    if [ -n "$previous_config" ]; then
+      conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$previous_config\""
+      if sh "$MODDIR/scripts/core/service.sh" fast-restart; then
+        die "Failed to start the new config, previous one restored"
+      fi
+    fi
+
+    # Nothing starts: remove the firewall rules so the phone keeps internet.
+    log "ERROR" "Could not restore previous config, stopping module to keep internet working"
+    sh "$MODDIR/scripts/core/service.sh" stop || true
+    die "Switch failed and Xray is stopped"
+  fi
+
+  # SWITCH_RESTART=0: swap the outbound in the running core, old connections stay.
   log "INFO" "Removing proxy outbound..."
   "$XRAY_BIN" api rmo --server="$XRAY_API_SERVER" "proxy" 2> /dev/null || true
 
@@ -39,8 +63,7 @@ hot_switch() {
   fi
 
   conf_set "$MODULE_CONF" "CURRENT_CONFIG" "\"$config_file\""
-
-  log "INFO" "========== Hot Switch Complete =========="
+  log "INFO" "========== Switch Complete =========="
 }
 
 if [ -z "${1:-}" ]; then
