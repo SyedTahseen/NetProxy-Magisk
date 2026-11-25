@@ -9,7 +9,7 @@
                 "statsUserUplink": false,
                 "statsUserDownlink": false,
                 "statsUserOnline": false,
-                "bufferSize": 4
+                "bufferSize": 512
             }
         },
         "system": {

@@ -13,9 +13,9 @@
                 "enabled": true,
                 "destOverride": [
                     "http",
-                    "tls",
-                    "quic"
-                ]
+                    "tls"
+                ],
+                "routeOnly": true
             },
             "streamSettings": {
                 "sockopt": {

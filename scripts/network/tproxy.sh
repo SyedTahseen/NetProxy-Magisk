@@ -846,7 +846,8 @@ setup_proxy_chain() {
   fi
 
   local _perf_ct=0
-  if [ "$PERFORMANCE_MODE" -eq 1 ] && check_kernel_feature "NETFILTER_XT_MATCH_CONNTRACK"; then
+  if [ "$PERFORMANCE_MODE" -eq 1 ] && check_kernel_feature "NETFILTER_XT_MATCH_CONNTRACK" \
+    && check_kernel_feature "NETFILTER_XT_TARGET_CONNMARK" && check_kernel_feature "NETFILTER_XT_MATCH_CONNMARK"; then
     _perf_ct=1
   fi
 
@@ -854,7 +855,7 @@ setup_proxy_chain() {
     "PROXY_IP$suffix" "BYPASS_IP$suffix" "PROXY_INTERFACE$suffix" "MAC_CHAIN$suffix" "DNS_HIJACK_PRE$suffix"
 
   _add_chain_jumps "PROXY_OUTPUT$suffix" "$_perf_ct" \
-    "PROXY_IP$suffix" "BYPASS_IP$suffix" "BYPASS_INTERFACE$suffix" "APP_CHAIN$suffix" "DNS_HIJACK_OUT$suffix"
+    "APP_CHAIN$suffix" "PROXY_IP$suffix" "BYPASS_IP$suffix" "BYPASS_INTERFACE$suffix" "DNS_HIJACK_OUT$suffix"
 
   local subnet4
   local subnet6
